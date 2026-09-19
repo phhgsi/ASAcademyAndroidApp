@@ -139,9 +139,17 @@ public class PreviousStudentEditActivity extends AppCompatActivity {
 
     private void populateData() {
         if (student.photoUrl != null && !student.photoUrl.trim().isEmpty()) {
-            apiClient.loadImage(student.photoUrl, ivAvatar);
-            ivAvatar.setVisibility(View.VISIBLE);
-            tvAvatarInitial.setVisibility(View.GONE);
+            apiClient.loadImage(student.photoUrl, new ApiClient.ApiCallback<Bitmap>() {
+                @Override
+                public void onSuccess(Bitmap result) {
+                    ivAvatar.setImageBitmap(result);
+                    ivAvatar.setVisibility(View.VISIBLE);
+                    tvAvatarInitial.setVisibility(View.GONE);
+                }
+
+                @Override
+                public void onError(String errorMessage) {}
+            });
         } else {
             String initial = "P";
             if (student.name != null && !student.name.trim().isEmpty()) {

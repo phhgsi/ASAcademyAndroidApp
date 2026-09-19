@@ -7,6 +7,7 @@ import android.graphics.BitmapFactory;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.LruCache;
+import android.widget.ImageView;
 
 import com.asacademy.schoolapp.models.ApiResponses;
 import com.google.gson.Gson;
@@ -314,6 +315,20 @@ public class ApiClient {
             } catch (Exception e) {
                 mainHandler.post(() -> callback.onError("Photo Upload Error: " + e.getMessage()));
             }
+        });
+    }
+
+    public void loadImage(String relativeUrl, ImageView imageView) {
+        if (imageView == null) return;
+        loadImage(relativeUrl, new ApiCallback<Bitmap>() {
+            @Override
+            public void onSuccess(Bitmap result) {
+                imageView.setImageBitmap(result);
+                imageView.setVisibility(android.view.View.VISIBLE);
+            }
+
+            @Override
+            public void onError(String errorMessage) {}
         });
     }
 
