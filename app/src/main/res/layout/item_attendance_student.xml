@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:padding="10dp"
+    android:layout_marginBottom="6dp"
+    android:background="@drawable/bg_card_dark">
+
+    <!-- Student Avatar / Roll -->
+    <TextView
+        android:id="@+id/tvRollBadge"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:gravity="center"
+        android:text="01"
+        android:textColor="@color/accent_sky"
+        android:textStyle="bold"
+        android:textSize="12sp"
+        android:background="@drawable/bg_chip_selected"
+        android:layout_marginEnd="10dp" />
+
+    <!-- Name & Scholar Info -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvStudentName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Student Full Name"
+            android:textColor="@color/text_light"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvScholarSub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="P-0123"
+            android:textColor="@color/text_muted"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- P / A / L Segmented Buttons -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/btnStatusP"
+            android:layout_width="34dp"
+            android:layout_height="32dp"
+            android:gravity="center"
+            android:text="P"
+            android:textColor="@android:color/white"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:background="#10B981"
+            android:layout_marginEnd="4dp" />
+
+        <TextView
+            android:id="@+id/btnStatusA"
+            android:layout_width="34dp"
+            android:layout_height="32dp"
+            android:gravity="center"
+            android:text="A"
+            android:textColor="@color/text_muted"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:background="#0C2849"
+            android:layout_marginEnd="4dp" />
+
+        <TextView
+            android:id="@+id/btnStatusL"
+            android:layout_width="34dp"
+            android:layout_height="32dp"
+            android:gravity="center"
+            android:text="L"
+            android:textColor="@color/text_muted"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:background="#0C2849" />
+    </LinearLayout>
+
+</LinearLayout>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_students"
+        android:icon="@android:drawable/ic_menu_myplaces"
+        android:title="Students" />
+    <item
+        android:id="@+id/nav_previous_students"
+        android:icon="@android:drawable/ic_menu_agenda"
+        android:title="Archive (दाखिल)" />
+    <item
+        android:id="@+id/nav_fees"
+        android:icon="@android:drawable/ic_menu_month"
+        android:title="Fees" />
+    <item
+        android:id="@+id/nav_exams"
+        android:icon="@android:drawable/ic_menu_edit"
+        android:title="Exams" />
+</menu>

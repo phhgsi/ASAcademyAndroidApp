@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Material 3 & Glass Liquid Primary Palette -->
+    <color name="m3_primary">#4F46E5</color>
+    <color name="m3_primary_light">#6366F1</color>
+    <color name="m3_primary_dark">#3730A3</color>
+    <color name="m3_primary_container">#1E1B4B</color>
+    <color name="m3_on_primary">#FFFFFF</color>
+
+    <!-- Secondary & Cyan Glow Accents -->
+    <color name="m3_secondary">#06B6D4</color>
+    <color name="m3_secondary_light">#22D3EE</color>
+    <color name="m3_secondary_container">#083344</color>
+
+    <!-- Obsidian & Deep Space Liquid Backgrounds -->
+    <color name="m3_bg_deep">#0B0F19</color>
+    <color name="m3_bg_surface">#111827</color>
+    <color name="m3_surface_card">#162032</color>
+    <color name="m3_surface_card_light">#1E293B</color>
+    <color name="m3_surface_glass">#1A2438</color>
+    <color name="m3_surface_glass_translucent">#E6152033</color>
+    
+    <!-- Glass Strokes & Outlines -->
+    <color name="m3_glass_border">#2A3854</color>
+    <color name="m3_glass_border_active">#4F46E5</color>
+    <color name="m3_glass_border_cyan">#0891B2</color>
+
+    <!-- Status & Semantic Badges -->
+    <color name="m3_success">#10B981</color>
+    <color name="m3_success_bg">#064E3B</color>
+    <color name="m3_warning">#F59E0B</color>
+    <color name="m3_warning_bg">#78350F</color>
+    <color name="m3_danger">#EF4444</color>
+    <color name="m3_danger_bg">#7F1D1D</color>
+    <color name="m3_info">#3B82F6</color>
+    <color name="m3_info_bg">#1E3A8A</color>
+
+    <!-- Typography Colors -->
+    <color name="m3_text_title">#FFFFFF</color>
+    <color name="m3_text_body">#F1F5F9</color>
+    <color name="m3_text_secondary">#94A3B8</color>
+    <color name="m3_text_muted">#64748B</color>
+
+    <!-- Legacy & Shortcut compatibility tokens -->
+    <color name="bg_dark">#0B0F19</color>
+    <color name="bg_card">#162032</color>
+    <color name="accent_sky">#06B6D4</color>
+    <color name="accent_gold">#F59E0B</color>
+    <color name="text_light">#FFFFFF</color>
+    <color name="text_muted">#94A3B8</color>
+    <color name="success_green">#10B981</color>
+    <color name="danger_red">#EF4444</color>
+    <color name="purple_200">#6366F1</color>
+    <color name="purple_500">#4F46E5</color>
+    <color name="purple_700">#0B0F19</color>
+    <color name="teal_200">#06B6D4</color>
+    <color name="teal_700">#0891B2</color>
+    <color name="black">#000000</color>
+    <color name="white">#FFFFFF</color>
+</resources>
