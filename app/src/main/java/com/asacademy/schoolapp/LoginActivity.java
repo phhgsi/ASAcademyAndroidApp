@@ -154,7 +154,14 @@ public class LoginActivity extends AppCompatActivity {
             public void onError(String errorMessage) {
                 btnLogin.setEnabled(true);
                 progressBar.setVisibility(View.GONE);
-                Toast.makeText(LoginActivity.this, errorMessage, Toast.LENGTH_LONG).show();
+
+                new AlertDialog.Builder(LoginActivity.this)
+                        .setTitle("Login / Connection Issue")
+                        .setMessage(errorMessage + "\n\nTip: Please verify your Server URL or scan the QR code from the Windows desktop screen.")
+                        .setPositiveButton("Configure Server", (dialog, which) -> showServerConfigDialog())
+                        .setNeutralButton("📷 Scan QR", (dialog, which) -> launchQrScanner())
+                        .setNegativeButton("Close", null)
+                        .show();
             }
         });
     }

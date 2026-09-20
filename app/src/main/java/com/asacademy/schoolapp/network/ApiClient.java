@@ -123,6 +123,7 @@ public class ApiClient {
                 conn.setConnectTimeout(10000);
                 conn.setReadTimeout(15000);
                 conn.setRequestProperty("Accept", "application/json");
+                conn.setInstanceFollowRedirects(true);
 
                 int code = conn.getResponseCode();
                 InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
@@ -152,6 +153,7 @@ public class ApiClient {
                 conn.setReadTimeout(15000);
                 conn.setRequestProperty("Content-Type", "application/json; utf-8");
                 conn.setRequestProperty("Accept", "application/json");
+                conn.setInstanceFollowRedirects(true);
 
                 String jsonInput = gson.toJson(requestBody);
                 try (OutputStream os = conn.getOutputStream()) {
@@ -179,16 +181,30 @@ public class ApiClient {
     private String extractErrorMessage(int code, String responseStr) {
         if (responseStr != null && !responseStr.trim().isEmpty()) {
             try {
-                ApiResponses.SimpleResponse errObj = gson.fromJson(responseStr, ApiResponses.SimpleResponse.class);
-                if (errObj != null && errObj.message != null && !errObj.message.trim().isEmpty()) {
-                    return errObj.message.trim();
+                org.json.JSONObject obj = new org.json.JSONObject(responseStr);
+                if (obj.has("message") && !obj.isNull("message")) {
+                    String msg = obj.optString("message", "");
+                    if (!msg.trim().isEmpty()) {
+                        return msg.trim();
+                    }
                 }
             } catch (Exception ignored) {}
+        }
+        if (code >= 500) {
+            if (responseStr != null && (responseStr.contains("<html") || responseStr.contains("<!DOCTYPE") || responseStr.toLowerCase().contains("cloudflare"))) {
+                if (code == 521 || code == 522 || code == 523) {
+                    return "Server Unreachable (HTTP " + code + "): The PC server is offline or not reachable via Cloudflare. Please start the server.";
+                }
+                if (code == 502 || code == 504) {
+                    return "Gateway Error (HTTP " + code + "): Unable to reach PC server. Make sure it is running on port 5233.";
+                }
+                return "Server / Tunnel Error (HTTP " + code + "): PC server is offline or unreachable.";
+            }
+            return "Server Error (HTTP " + code + "). Please verify the server is running.";
         }
         if (code == 401) return "Invalid username or password (HTTP 401).";
         if (code == 403) return "Forbidden (HTTP 403): You do not have permission.";
         if (code == 404) return "Endpoint not found (HTTP 404). Please verify Server URL.";
-        if (code >= 500) return "Server Error (HTTP " + code + "). Please check server logs.";
         return "Server returned status " + code + (responseStr != null ? ": " + responseStr : "");
     }
 

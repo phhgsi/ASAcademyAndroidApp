@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag Name (e.g. v1.2)'
+        description: 'Release Tag Name (e.g. v1.4)'
         required: false
-        default: 'v1.2'
+        default: 'v1.4'
 
 permissions:
   contents: write
@@ -36,59 +36,77 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Build Android APK
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Determine Release Tag & Version
+        id: release_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v1.4"
+          fi
+
+          # Ensure tag starts with 'v'
+          if [[ ! "$TAG" =~ ^v ]]; then
+            TAG="v$TAG"
+          fi
+
+          # Strip leading 'v' for versionName (e.g. v1.4 -> 1.4)
+          VERSION="${TAG#v}"
+
+          # Compute integer versionCode (offset run_number by 10 to guarantee monotonic increase)
+          CODE=$(( ${{ github.run_number }} + 10 ))
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "code=$CODE" >> $GITHUB_OUTPUT
+          echo "==> Target Tag: $TAG | VersionName: $VERSION | VersionCode: $CODE"
+
+      - name: Build Android APK with Dynamic Version
+        run: |
+          ./gradlew assembleDebug -PappVersionName="${{ steps.release_version.outputs.version }}" -PappVersionCode="${{ steps.release_version.outputs.code }}" --stacktrace
 
       - name: Prepare Release APK Artifact
         run: |
+          TAG="${{ steps.release_version.outputs.tag }}"
           mkdir -p release-output
-          cp app/build/outputs/apk/debug/app-debug.apk release-output/ASAcademyApp-v1.2.apk
-          echo "APK generated successfully:"
+          cp app/build/outputs/apk/debug/app-debug.apk "release-output/ASAcademyApp-${TAG}.apk"
+          echo "APK generated successfully as ASAcademyApp-${TAG}.apk:"
           ls -lh release-output/
 
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ASAcademyApp-v1.2
-          path: release-output/ASAcademyApp-v1.2.apk
+          name: ASAcademyApp-${{ steps.release_version.outputs.tag }}
+          path: release-output/ASAcademyApp-${{ steps.release_version.outputs.tag }}.apk
           retention-days: 30
-
-      - name: Determine Release Tag
-        id: release_tag
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.tag_name }}"
-          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            TAG="${GITHUB_REF#refs/tags/}"
-          else
-            TAG="v1.2"
-          fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.release_tag.outputs.tag }}
-          name: "A.S. Academy Mobile App ${{ steps.release_tag.outputs.tag }}"
+          tag_name: ${{ steps.release_version.outputs.tag }}
+          name: "A.S. Academy Mobile App ${{ steps.release_version.outputs.tag }}"
           body: |
-            ## 📱 A.S. Academy School Portal & Mobile Photo Studio
+            ## 📱 A.S. Academy School Portal & Mobile Photo Studio (${{ steps.release_version.outputs.tag }})
 
             Standalone Native Android App for school operations, fee collection, attendance, and bulk photography.
 
-            ### ✨ Key Features & Improvements:
-            - **📸 Rapid Photo Desk**: Bulk photography studio mode with live capture progress (`X / Total Captured`) and instant Google ML Kit AI face framing.
-            - **✨ AI-Framed Photo Updates**: Safe native camera shutter + phone gallery / file picker with 3:4 passport auto-cropping, edge sharpening, and adaptive compression (<75KB).
+            ### ✨ What's New in ${{ steps.release_version.outputs.tag }}:
+            - **⚡ Dynamic Version Tag**: Built automatically with release version `${{ steps.release_version.outputs.version }}`.
+            - **🔐 Enhanced Login & Error Diagnostics**: Clear connection guidance for local Wi-Fi and Cloudflare live tunnels.
+            - **📸 Rapid Photo Desk**: Bulk photography studio mode with horizontal class chips and instant Google ML Kit AI face framing.
+            - **✨ AI-Framed Photo Updates**: Safe native camera shutter + phone gallery / file picker with 3:4 passport auto-cropping, edge sharpening, and adaptive compression (<60ms).
             - **🪪 Digital Student Identity Card**: Kyant0 continuous squircle portrait framing with dynamic on-device QR code verification and 1-tap share.
             - **💬 Parent Quick Actions**: Direct WhatsApp message trigger and 1-tap phone dialer.
             - **🏛️ Permanent Register / Archive Photo Management**: Capture, optimize, and update photos for past/archived students.
-            - **🎨 Kyant0 Compose UI**: Modern Material 3 Expressive UI tokens with Capsule & Shapes (`io.github.kyant0:capsule:2.1.3`).
-            - **🌐 Dynamic Server URL Connection**: Connect over local Wi-Fi LAN or Cloudflare Live Tunnel with QR code scanner.
+            - **🔄 In-App Auto Update**: Automatically checks GitHub Releases for new updates and installs in 1 tap.
 
             ### 📲 Installation:
-            1. Download `ASAcademyApp-v1.2.apk` below.
+            1. Download `ASAcademyApp-${{ steps.release_version.outputs.tag }}.apk` below.
             2. Open on any Android phone (Android 5.0 to 14+) and tap **Install**.
           files: |
-            release-output/ASAcademyApp-v1.2.apk
+            release-output/ASAcademyApp-${{ steps.release_version.outputs.tag }}.apk
           draft: false
           prerelease: false
         env:
