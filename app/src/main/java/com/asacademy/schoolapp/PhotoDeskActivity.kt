@@ -284,6 +284,7 @@ class PhotoDeskActivity : ComponentActivity() {
     fun PhotoDeskScreen() {
         val filteredStudents = remember(studentsList.toList(), activeFilter, searchQuery, selectedClassId) {
             studentsList.filter { student ->
+                val matchesClass = if (selectedClassId == null || selectedClassId == 0) true else student.classId == selectedClassId
                 val matchesFilter = when (activeFilter) {
                     "MISSING" -> student.photoUrl.isNullOrBlank()
                     "HAS_PHOTO" -> !student.photoUrl.isNullOrBlank()
@@ -295,12 +296,12 @@ class PhotoDeskActivity : ComponentActivity() {
                             (student.scholarNumber?.lowercase()?.contains(query) == true) ||
                             (student.fatherName?.lowercase()?.contains(query) == true)
                 }
-                matchesFilter && matchesSearch
+                matchesClass && matchesFilter && matchesSearch
             }
         }
 
-        val totalCount = studentsList.size
-        val withPhotoCount = studentsList.count { !it.photoUrl.isNullOrBlank() }
+        val totalCount = filteredStudents.size
+        val withPhotoCount = filteredStudents.count { !it.photoUrl.isNullOrBlank() }
         val missingPhotoCount = totalCount - withPhotoCount
         val progress = if (totalCount > 0) withPhotoCount.toFloat() / totalCount else 0f
         val animatedProgress by animateFloatAsState(targetValue = progress, label = "progress")
@@ -438,11 +439,53 @@ class PhotoDeskActivity : ComponentActivity() {
                     singleLine = true
                 )
 
+                // Class Selection Chips Row
+                if (classList.isNotEmpty()) {
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        item {
+                            FilterChip(
+                                selected = selectedClassId == null || selectedClassId == 0,
+                                onClick = {
+                                    selectedClassId = 0
+                                    loadStudents()
+                                },
+                                label = { Text("All Classes", fontSize = 12.sp) },
+                                shape = RoundedCornerShape(50),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF0284C7),
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                        items(classList) { cls ->
+                            val isSelected = selectedClassId == cls.id
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    selectedClassId = if (isSelected) 0 else cls.id
+                                    loadStudents()
+                                },
+                                label = { Text(cls.className ?: "Class", fontSize = 12.sp) },
+                                shape = RoundedCornerShape(50),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF0284C7),
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                    }
+                }
+
                 // Filter Chips Row (Kyant0 Pill Shape)
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 6.dp),
+                        .padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     item {
