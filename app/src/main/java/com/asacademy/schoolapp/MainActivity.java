@@ -98,6 +98,9 @@ public class MainActivity extends AppCompatActivity implements
         loadClasses();
         loadStudents();
         loadDashboardMetrics();
+
+        // 🚀 Check for GitHub Release updates automatically (silent check)
+        com.asacademy.schoolapp.utils.AppUpdateManager.checkForUpdate(this, false);
     }
 
     @Override
@@ -220,6 +223,10 @@ public class MainActivity extends AppCompatActivity implements
         // Top Server URL button triggers server change dialog directly
         if (btnServerConfigMain != null) {
             btnServerConfigMain.setOnClickListener(v -> showServerConfigDialog());
+            btnServerConfigMain.setOnLongClickListener(v -> {
+                com.asacademy.schoolapp.utils.AppUpdateManager.checkForUpdate(MainActivity.this, true);
+                return true;
+            });
         }
 
         View btnScanQrMain = findViewById(R.id.btnScanQrMain);
@@ -231,6 +238,10 @@ public class MainActivity extends AppCompatActivity implements
             btnQuickRefresh.setOnClickListener(v -> {
                 Toast.makeText(MainActivity.this, "🔄 Syncing latest data...", Toast.LENGTH_SHORT).show();
                 refreshCurrentTab();
+            });
+            btnQuickRefresh.setOnLongClickListener(v -> {
+                com.asacademy.schoolapp.utils.AppUpdateManager.checkForUpdate(MainActivity.this, true);
+                return true;
             });
         }
 
@@ -602,8 +613,18 @@ public class MainActivity extends AppCompatActivity implements
                 refreshCurrentTab();
             }
         });
-        builder.setNeutralButton("📷 Scan QR", (dialog, which) -> {
-            launchQrScanner();
+        builder.setNeutralButton("📷 Tools / 🚀 Update", (dialog, which) -> {
+            CharSequence[] options = new CharSequence[]{"📷 Scan Server QR Code", "🚀 Check for App Updates (GitHub)"};
+            new AlertDialog.Builder(MainActivity.this)
+                    .setTitle("Tools & Updates")
+                    .setItems(options, (d, idx) -> {
+                        if (idx == 0) {
+                            launchQrScanner();
+                        } else {
+                            com.asacademy.schoolapp.utils.AppUpdateManager.checkForUpdate(MainActivity.this, true);
+                        }
+                    })
+                    .show();
         });
         builder.setNegativeButton("Cancel", null);
         builder.show();
