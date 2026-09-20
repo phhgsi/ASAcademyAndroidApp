@@ -213,13 +213,52 @@ public class ApiClient {
     }
 
     public <T> void uploadPhotoDirectBase64(int studentId, String base64Image, Class<T> responseClass, ApiCallback<T> callback) {
+        uploadPhotoDirectBase64Internal(false, studentId, base64Image, responseClass, callback);
+    }
+
+    public <T> void uploadPreviousStudentPhotoDirectBase64(int studentId, String base64Image, Class<T> responseClass, ApiCallback<T> callback) {
+        uploadPhotoDirectBase64Internal(true, studentId, base64Image, responseClass, callback);
+    }
+
+    private <T> void uploadPhotoDirectBase64Internal(boolean isPrevious, int studentId, String base64Image, Class<T> responseClass, ApiCallback<T> callback) {
         executor.execute(() -> {
             try {
+                String endpoint = isPrevious 
+                        ? "api/mobile/previous-students/upload-photo-base64" 
+                        : "api/mobile/students/upload-photo-base64";
+
+                String fullUrl = getBaseUrl() + (endpoint.startsWith("/") ? endpoint : "/" + endpoint);
+                HttpURLConnection conn = (HttpURLConnection) new URL(fullUrl).openConnection();
+                conn.setRequestMethod("POST");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(30000); // 30s connect timeout for photo uploads
+                conn.setReadTimeout(60000);    // 60s read timeout for photo uploads
+                conn.setRequestProperty("Content-Type", "application/json; utf-8");
+                conn.setRequestProperty("Accept", "application/json");
+
                 java.util.Map<String, Object> body = new java.util.HashMap<>();
                 body.put("studentId", studentId);
                 body.put("base64Image", base64Image);
+                body.put("isPreviousStudent", isPrevious);
+                body.put("studentType", isPrevious ? "previous" : "active");
 
-                post("api/mobile/students/upload-photo-base64", body, responseClass, callback);
+                String jsonInput = gson.toJson(body);
+                try (OutputStream os = conn.getOutputStream()) {
+                    byte[] input = jsonInput.getBytes(StandardCharsets.UTF_8);
+                    os.write(input, 0, input.length);
+                }
+
+                int code = conn.getResponseCode();
+                InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
+                String responseStr = readStream(is);
+
+                if (code >= 200 && code < 300) {
+                    T result = gson.fromJson(responseStr, responseClass);
+                    mainHandler.post(() -> callback.onSuccess(result));
+                } else {
+                    String msg = extractErrorMessage(code, responseStr);
+                    mainHandler.post(() -> callback.onError(msg));
+                }
             } catch (Exception e) {
                 mainHandler.post(() -> callback.onError("Failed to upload photo: " + e.getMessage()));
             }
@@ -250,11 +289,7 @@ public class ApiClient {
                 byte[] imageBytes = baos.toByteArray();
                 String base64Image = android.util.Base64.encodeToString(imageBytes, android.util.Base64.NO_WRAP);
 
-                java.util.Map<String, Object> body = new java.util.HashMap<>();
-                body.put("studentId", studentId);
-                body.put("base64Image", base64Image);
-
-                post("api/mobile/students/upload-photo-base64", body, responseClass, callback);
+                uploadPhotoDirectBase64(studentId, base64Image, responseClass, callback);
             } catch (Exception e) {
                 mainHandler.post(() -> callback.onError("Failed to encode photo: " + e.getMessage()));
             }
@@ -377,6 +412,34 @@ public class ApiClient {
                 mainHandler.post(() -> callback.onError(e.getMessage()));
             }
         });
+    }
+
+    public void evictFromImageCache(String relativeOrFullUrl) {
+        if (relativeOrFullUrl == null || relativeOrFullUrl.trim().isEmpty()) return;
+        String fullUrl = relativeOrFullUrl.startsWith("http://") || relativeOrFullUrl.startsWith("https://") 
+                ? relativeOrFullUrl 
+                : getBaseUrl() + (relativeOrFullUrl.startsWith("/") ? relativeOrFullUrl : "/" + relativeOrFullUrl);
+        imageCache.remove(fullUrl);
+        int qIdx = fullUrl.indexOf('?');
+        if (qIdx != -1) {
+            imageCache.remove(fullUrl.substring(0, qIdx));
+        }
+    }
+
+    public void cacheBitmap(String relativeOrFullUrl, Bitmap bitmap) {
+        if (relativeOrFullUrl == null || bitmap == null) return;
+        String fullUrl = relativeOrFullUrl.startsWith("http://") || relativeOrFullUrl.startsWith("https://") 
+                ? relativeOrFullUrl 
+                : getBaseUrl() + (relativeOrFullUrl.startsWith("/") ? relativeOrFullUrl : "/" + relativeOrFullUrl);
+        imageCache.put(fullUrl, bitmap);
+        int qIdx = fullUrl.indexOf('?');
+        if (qIdx != -1) {
+            imageCache.put(fullUrl.substring(0, qIdx), bitmap);
+        }
+    }
+
+    public void clearImageCache() {
+        imageCache.evictAll();
     }
 
     private String readStream(InputStream is) throws Exception {

@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
@@ -14,6 +15,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,6 +33,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -240,6 +244,8 @@ class PhotoDeskActivity : ComponentActivity() {
                             runOnUiThread {
                                 isUploading = false
                                 if (response.success) {
+                                    apiClient.evictFromImageCache(response.photoUrl)
+                                    apiClient.cacheBitmap(response.photoUrl, result.bitmap)
                                     // Update in-memory list
                                     val index = studentsList.indexOfFirst { it.id == targetStudentId }
                                     if (index != -1) {
@@ -518,6 +524,24 @@ class PhotoDeskActivity : ComponentActivity() {
     @Composable
     fun StudentPhotoCard(student: Student, onSnapClick: () -> Unit) {
         val hasPhoto = !student.photoUrl.isNullOrBlank()
+        var bitmapState by remember(student.photoUrl) { mutableStateOf<Bitmap?>(null) }
+
+        LaunchedEffect(student.photoUrl) {
+            val url = student.photoUrl
+            if (!url.isNullOrBlank()) {
+                apiClient.loadImage(url, object : ApiClient.ApiCallback<Bitmap> {
+                    override fun onSuccess(result: Bitmap?) {
+                        bitmapState = result
+                    }
+
+                    override fun onError(errorMessage: String?) {
+                        bitmapState = null
+                    }
+                })
+            } else {
+                bitmapState = null
+            }
+        }
 
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -545,12 +569,22 @@ class PhotoDeskActivity : ComponentActivity() {
                         .clickable { onSnapClick() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = (student.fullName?.take(1) ?: "S").uppercase(),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp,
-                        color = Color.White
-                    )
+                    val bmp = bitmapState
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = "Student Photo",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Text(
+                            text = (student.fullName?.take(1) ?: "S").uppercase(),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp,
+                            color = Color.White
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(12.dp))

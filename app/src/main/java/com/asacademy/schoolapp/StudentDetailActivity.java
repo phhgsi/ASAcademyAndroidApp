@@ -465,6 +465,8 @@ public class StudentDetailActivity extends AppCompatActivity {
                             btnTakePhoto.setEnabled(true);
                             if (response.success) {
                                 student.photoUrl = response.photoUrl;
+                                apiClient.evictFromImageCache(response.photoUrl);
+                                apiClient.cacheBitmap(response.photoUrl, result.bitmap);
                                 Toast.makeText(StudentDetailActivity.this, result.summaryText, Toast.LENGTH_LONG).show();
                             } else {
                                 Toast.makeText(StudentDetailActivity.this, response.message, Toast.LENGTH_LONG).show();

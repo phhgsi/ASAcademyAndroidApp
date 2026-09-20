@@ -373,13 +373,15 @@ public class PreviousStudentEditActivity extends AppCompatActivity {
                     ivAvatar.setVisibility(View.VISIBLE);
                     tvAvatarInitial.setVisibility(View.GONE);
 
-                    apiClient.uploadPhotoDirectBase64(student.id, result.base64Image, ApiResponses.PhotoUploadResponse.class, new ApiClient.ApiCallback<ApiResponses.PhotoUploadResponse>() {
+                    apiClient.uploadPreviousStudentPhotoDirectBase64(student.id, result.base64Image, ApiResponses.PhotoUploadResponse.class, new ApiClient.ApiCallback<ApiResponses.PhotoUploadResponse>() {
                         @Override
                         public void onSuccess(ApiResponses.PhotoUploadResponse response) {
                             progressBar.setVisibility(View.GONE);
                             btnTakePhoto.setEnabled(true);
                             if (response.success) {
                                 student.photoUrl = response.photoUrl;
+                                apiClient.evictFromImageCache(response.photoUrl);
+                                apiClient.cacheBitmap(response.photoUrl, result.bitmap);
                                 Toast.makeText(PreviousStudentEditActivity.this, result.summaryText, Toast.LENGTH_LONG).show();
                             } else {
                                 Toast.makeText(PreviousStudentEditActivity.this, response.message, Toast.LENGTH_LONG).show();
