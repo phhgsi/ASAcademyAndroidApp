@@ -525,23 +525,21 @@ public class PreviousStudentEditActivity extends AppCompatActivity {
             return;
         }
 
-        String scholarNum = etScholarNumber.getText().toString().trim();
-        if (scholarNum.isEmpty()) {
-            scholarNum = student.scholarNumber;
-        }
+        String rawScholar = etScholarNumber.getText().toString().trim();
+        final String scholarNum = rawScholar.isEmpty() ? student.scholarNumber : rawScholar;
 
         progressBar.setVisibility(View.VISIBLE);
         btnSave.setEnabled(false);
 
-        String wing = spWing.getSelectedItemPosition() == 1 ? "Secondary" : "Primary";
-        String nameHindi = etNameHindi.getText().toString().trim();
-        String fatherName = etFatherName.getText().toString().trim();
+        final String wing = spWing.getSelectedItemPosition() == 1 ? "Secondary" : "Primary";
+        final String nameHindi = etNameHindi.getText().toString().trim();
+        final String fatherName = etFatherName.getText().toString().trim();
         String fatherNameHindi = etFatherNameHindi.getText().toString().trim();
         String motherName = etMotherName.getText().toString().trim();
         String motherNameHindi = etMotherNameHindi.getText().toString().trim();
-        String className = etClass.getText().toString().trim();
-        String status = spStatus.getSelectedItem().toString();
-        String sssmid = etSssmid.getText().toString().trim();
+        final String className = etClass.getText().toString().trim();
+        final String status = spStatus.getSelectedItem().toString();
+        final String sssmid = etSssmid.getText().toString().trim();
         String aadhar = etAadhar.getText().toString().trim();
         String dob = etDob.getText().toString().trim();
         String gender = spGender.getSelectedItem().toString();
