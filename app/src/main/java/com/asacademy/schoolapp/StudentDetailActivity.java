@@ -31,6 +31,8 @@ import androidx.core.content.FileProvider;
 import com.asacademy.schoolapp.models.ApiResponses;
 import com.asacademy.schoolapp.models.Student;
 import com.asacademy.schoolapp.network.ApiClient;
+import com.asacademy.schoolapp.utils.PhotoUploadManager;
+import com.asacademy.schoolapp.utils.StudentNavigationManager;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -51,11 +53,42 @@ public class StudentDetailActivity extends AppCompatActivity {
 
     private Student student;
     private ApiClient apiClient;
+    private PhotoUploadManager uploadManager;
+
+    private View layoutStudentNav;
+    private Button btnNavPrev, btnNavNext;
+    private TextView tvNavPosition, tvPhotoSyncStatus;
 
     private ImageView ivAvatar;
     private TextView tvAvatarInitial, tvScholarBadge, tvClassBadge, tvWingBadge, tvStudentTitle, tvHindiTitle;
     private Button btnTakePhoto, btnSave, btnDelete, btnFeeDesk, btnIdCard, btnWhatsApp, btnCallParent;
     private ProgressBar progressBar;
+
+    private final PhotoUploadManager.UploadListener uploadListener = new PhotoUploadManager.UploadListener() {
+        @Override
+        public void onQueueProgress(int remainingCount, int uploadingCount, int completedCount) {}
+
+        @Override
+        public void onItemStatusChanged(PhotoUploadManager.UploadItem item) {
+            if (student != null && item.studentId == student.id && !item.isPreviousStudent) {
+                runOnUiThread(() -> {
+                    if (item.status == PhotoUploadManager.Status.SUCCESS && item.serverPhotoUrl != null) {
+                        student.photoUrl = item.serverPhotoUrl;
+                        StudentNavigationManager.updateActiveStudent(student);
+                        if (tvPhotoSyncStatus != null) {
+                            tvPhotoSyncStatus.setText("✅ Photo synced to server");
+                            tvPhotoSyncStatus.setVisibility(View.VISIBLE);
+                        }
+                    } else if (item.status == PhotoUploadManager.Status.FAILED) {
+                        if (tvPhotoSyncStatus != null) {
+                            tvPhotoSyncStatus.setText("⚠️ Upload failed: " + (item.error != null ? item.error : "Network error"));
+                            tvPhotoSyncStatus.setVisibility(View.VISIBLE);
+                        }
+                    }
+                });
+            }
+        }
+    };
 
     private EditText etScholar, etFirstName, etLastName, etNameHindi, etFatherMobile;
     private EditText etFatherName, etFatherNameHindi, etMotherName, etMotherNameHindi;
@@ -71,6 +104,8 @@ public class StudentDetailActivity extends AppCompatActivity {
         setContentView(R.layout.activity_student_detail);
 
         apiClient = ApiClient.getInstance(this);
+        uploadManager = PhotoUploadManager.getInstance(this);
+        uploadManager.registerListener(uploadListener);
 
         student = (Student) getIntent().getSerializableExtra("student");
         if (student == null) {
@@ -82,9 +117,24 @@ public class StudentDetailActivity extends AppCompatActivity {
         initViews();
         populateData();
         setupListeners();
+        updateNavigationUi();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (uploadManager != null) {
+            uploadManager.unregisterListener(uploadListener);
+        }
     }
 
     private void initViews() {
+        layoutStudentNav = findViewById(R.id.layoutStudentNav);
+        btnNavPrev = findViewById(R.id.btnNavPrev);
+        btnNavNext = findViewById(R.id.btnNavNext);
+        tvNavPosition = findViewById(R.id.tvNavPosition);
+        tvPhotoSyncStatus = findViewById(R.id.tvPhotoSyncStatus);
+
         ivAvatar = findViewById(R.id.ivAvatar);
         tvAvatarInitial = findViewById(R.id.tvAvatarInitial);
         tvScholarBadge = findViewById(R.id.tvScholarBadge);
@@ -271,6 +321,50 @@ public class StudentDetailActivity extends AppCompatActivity {
             intent.putExtra("student", student);
             startActivity(intent);
         });
+
+        if (btnNavPrev != null) {
+            btnNavPrev.setOnClickListener(v -> navigateStudent(false));
+        }
+        if (btnNavNext != null) {
+            btnNavNext.setOnClickListener(v -> navigateStudent(true));
+        }
+    }
+
+    private void updateNavigationUi() {
+        if (layoutStudentNav == null) return;
+        if (StudentNavigationManager.getActiveTotalCount() > 1) {
+            layoutStudentNav.setVisibility(View.VISIBLE);
+            int current = StudentNavigationManager.getActiveCurrentIndex() + 1;
+            int total = StudentNavigationManager.getActiveTotalCount();
+            if (tvNavPosition != null) {
+                tvNavPosition.setText("Student " + current + " of " + total);
+            }
+            if (btnNavPrev != null) {
+                btnNavPrev.setEnabled(StudentNavigationManager.hasActivePrev());
+                btnNavPrev.setAlpha(StudentNavigationManager.hasActivePrev() ? 1.0f : 0.35f);
+            }
+            if (btnNavNext != null) {
+                btnNavNext.setEnabled(StudentNavigationManager.hasActiveNext());
+                btnNavNext.setAlpha(StudentNavigationManager.hasActiveNext() ? 1.0f : 0.35f);
+            }
+        } else {
+            layoutStudentNav.setVisibility(View.GONE);
+        }
+    }
+
+    private void navigateStudent(boolean forward) {
+        Student target = forward ? StudentNavigationManager.getActiveNext() : StudentNavigationManager.getActivePrev();
+        if (target != null) {
+            student = target;
+            populateData();
+            updateNavigationUi();
+            if (tvPhotoSyncStatus != null) {
+                tvPhotoSyncStatus.setVisibility(View.GONE);
+            }
+            Intent res = new Intent();
+            res.putExtra("updated_student", student);
+            setResult(RESULT_OK, res);
+        }
     }
 
     private void showPhotoOptionsDialog() {
@@ -444,50 +538,54 @@ public class StudentDetailActivity extends AppCompatActivity {
     }
 
     private void compressAndUploadPhoto(File photoFile) {
-        progressBar.setVisibility(View.VISIBLE);
-        btnTakePhoto.setEnabled(false);
+        if (tvPhotoSyncStatus != null) {
+            tvPhotoSyncStatus.setText("⚡ Auto-framing & optimizing photo...");
+            tvPhotoSyncStatus.setVisibility(View.VISIBLE);
+        }
 
         // Run On-Device Google ML Kit AI Face Detection, Passport Auto-Framing & Smart Compression
         com.asacademy.schoolapp.utils.ImageEnhancer.processAndOptimizePhotoAsync(photoFile, new com.asacademy.schoolapp.utils.ImageEnhancer.AiOptimizationCallback() {
             @Override
             public void onSuccess(com.asacademy.schoolapp.utils.ImageEnhancer.AiOptimizedResult result) {
                 runOnUiThread(() -> {
-                    // Update UI Preview with AI-Framed Portrait
+                    // 1. Instant UI Preview (0ms delay)
                     ivAvatar.setImageBitmap(result.bitmap);
                     ivAvatar.setVisibility(View.VISIBLE);
                     tvAvatarInitial.setVisibility(View.GONE);
 
-                    // Upload pre-compressed Base64 directly
-                    apiClient.uploadPhotoDirectBase64(student.id, result.base64Image, ApiResponses.PhotoUploadResponse.class, new ApiClient.ApiCallback<ApiResponses.PhotoUploadResponse>() {
-                        @Override
-                        public void onSuccess(ApiResponses.PhotoUploadResponse response) {
-                            progressBar.setVisibility(View.GONE);
-                            btnTakePhoto.setEnabled(true);
-                            if (response.success) {
-                                student.photoUrl = response.photoUrl;
-                                apiClient.evictFromImageCache(response.photoUrl);
-                                apiClient.cacheBitmap(response.photoUrl, result.bitmap);
-                                Toast.makeText(StudentDetailActivity.this, result.summaryText, Toast.LENGTH_LONG).show();
-                            } else {
-                                Toast.makeText(StudentDetailActivity.this, response.message, Toast.LENGTH_LONG).show();
-                            }
-                        }
+                    // 2. Enqueue into background upload queue without blocking screen
+                    String tempKey = uploadManager.enqueue(
+                            student.id,
+                            false,
+                            student.fullName,
+                            student.scholarNumber,
+                            result.bitmap,
+                            result.base64Image
+                    );
 
-                        @Override
-                        public void onError(String errorMessage) {
-                            progressBar.setVisibility(View.GONE);
-                            btnTakePhoto.setEnabled(true);
-                            Toast.makeText(StudentDetailActivity.this, "Upload Error: " + errorMessage, Toast.LENGTH_LONG).show();
-                        }
-                    });
+                    student.photoUrl = tempKey;
+                    StudentNavigationManager.updateActiveStudent(student);
+
+                    if (tvPhotoSyncStatus != null) {
+                        tvPhotoSyncStatus.setText("☁️ Photo syncing in background...");
+                        tvPhotoSyncStatus.setVisibility(View.VISIBLE);
+                    }
+
+                    // Prepare return intent for zero-reload in MainActivity
+                    Intent res = new Intent();
+                    res.putExtra("updated_student", student);
+                    setResult(RESULT_OK, res);
+
+                    Toast.makeText(StudentDetailActivity.this, "📸 " + result.summaryText + "\nSyncing in background...", Toast.LENGTH_SHORT).show();
                 });
             }
 
             @Override
             public void onError(String errorMessage) {
                 runOnUiThread(() -> {
-                    progressBar.setVisibility(View.GONE);
-                    btnTakePhoto.setEnabled(true);
+                    if (tvPhotoSyncStatus != null) {
+                        tvPhotoSyncStatus.setText("❌ " + errorMessage);
+                    }
                     Toast.makeText(StudentDetailActivity.this, errorMessage, Toast.LENGTH_SHORT).show();
                 });
             }
@@ -532,8 +630,23 @@ public class StudentDetailActivity extends AppCompatActivity {
                 progressBar.setVisibility(View.GONE);
                 btnSave.setEnabled(true);
                 if (result.success) {
+                    // Update in-memory student object
+                    student.scholarNumber = scholarNum;
+                    student.wing = selectedWing;
+                    student.firstName = firstName;
+                    student.lastName = etLastName.getText().toString().trim();
+                    student.fullName = firstName + (student.lastName.isEmpty() ? "" : " " + student.lastName);
+                    student.nameHindi = etNameHindi.getText().toString().trim();
+                    student.fatherName = etFatherName.getText().toString().trim();
+                    student.mobile = etFatherMobile.getText().toString().trim();
+                    StudentNavigationManager.updateActiveStudent(student);
+
+                    // Notify MainActivity with in-place updated student
+                    Intent res = new Intent();
+                    res.putExtra("updated_student", student);
+                    setResult(RESULT_OK, res);
+
                     Toast.makeText(StudentDetailActivity.this, "✅ Details updated successfully!", Toast.LENGTH_SHORT).show();
-                    setResult(RESULT_OK);
                 } else {
                     Toast.makeText(StudentDetailActivity.this, result.message, Toast.LENGTH_LONG).show();
                 }

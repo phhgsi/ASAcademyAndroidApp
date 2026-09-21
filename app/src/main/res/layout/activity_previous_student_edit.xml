@@ -12,6 +12,55 @@
         android:orientation="vertical"
         android:padding="16dp">
 
+        <!-- Quick Student Navigation Bar (Bulk Mode) -->
+        <LinearLayout
+            android:id="@+id/layoutStudentNav"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:background="@drawable/bg_glass_card"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="8dp"
+            android:visibility="gone">
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnNavPrev"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_glass_pill_unselected"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="◀ Prev"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvNavPosition"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="Student 1 of 40"
+                android:textColor="#94A3B8"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnNavNext"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_m3_btn_primary"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="Next ▶"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
+        </LinearLayout>
+
         <!-- Top Header Glass Card -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
@@ -67,6 +116,17 @@
                     android:text="📸 Update Photo (Camera / Gallery)"
                     android:textColor="#FFFFFF"
                     android:textSize="12.5sp" />
+
+                <!-- Photo Background Sync Status -->
+                <TextView
+                    android:id="@+id/tvPhotoSyncStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="☁️ Photo syncing in background"
+                    android:textColor="#38BDF8"
+                    android:textSize="11.5sp"
+                    android:visibility="gone" />
 
                 <LinearLayout
                     android:layout_width="wrap_content"

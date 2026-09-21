@@ -46,6 +46,7 @@ import com.asacademy.schoolapp.models.SchoolClass
 import com.asacademy.schoolapp.models.Student
 import com.asacademy.schoolapp.network.ApiClient
 import com.asacademy.schoolapp.utils.ImageEnhancer
+import com.asacademy.schoolapp.utils.PhotoUploadManager
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -55,6 +56,7 @@ import java.util.*
 class PhotoDeskActivity : ComponentActivity() {
 
     private lateinit var apiClient: ApiClient
+    private lateinit var uploadManager: PhotoUploadManager
     private var targetStudentId: Int = 0
     private var currentPhotoFile: File? = null
     private var photoUri: Uri? = null
@@ -66,8 +68,32 @@ class PhotoDeskActivity : ComponentActivity() {
     private var activeFilter by mutableStateOf("ALL") // "ALL", "MISSING", "HAS_PHOTO"
     private var searchQuery by mutableStateOf("")
     private var isLoading by mutableStateOf(false)
-    private var isUploading by mutableStateOf(false)
-    private var statusMessage by mutableStateOf("")
+    private var queueRemaining by mutableStateOf(0)
+    private var queueActive by mutableStateOf(0)
+    private var queueCompleted by mutableStateOf(0)
+
+    private val uploadListener = object : PhotoUploadManager.UploadListener {
+        override fun onQueueProgress(remainingCount: Int, uploadingCount: Int, completedCount: Int) {
+            runOnUiThread {
+                queueRemaining = remainingCount
+                queueActive = uploadingCount
+                queueCompleted = completedCount
+            }
+        }
+
+        override fun onItemStatusChanged(item: PhotoUploadManager.UploadItem) {
+            if (item.status == PhotoUploadManager.Status.SUCCESS && item.serverPhotoUrl != null) {
+                runOnUiThread {
+                    val index = studentsList.indexOfFirst { it.id == item.studentId }
+                    if (index != -1) {
+                        val s = studentsList[index]
+                        s.photoUrl = item.serverPhotoUrl
+                        studentsList[index] = s
+                    }
+                }
+            }
+        }
+    }
 
     // Camera launcher
     private val cameraLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -95,6 +121,8 @@ class PhotoDeskActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         apiClient = ApiClient.getInstance(this)
+        uploadManager = PhotoUploadManager.getInstance(this)
+        uploadManager.registerListener(uploadListener)
 
         loadClasses()
         loadStudents()
@@ -231,48 +259,44 @@ class PhotoDeskActivity : ComponentActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        uploadManager.unregisterListener(uploadListener)
+    }
+
     private fun processAndUploadCapturedPhoto(photoFile: File) {
-        isUploading = true
-        statusMessage = "AI face framing & optimizing..."
+        val currentTargetId = targetStudentId
+        val targetStudent = studentsList.firstOrNull { it.id == currentTargetId }
+        val sName = targetStudent?.fullName ?: "Student #$currentTargetId"
+        val sScholar = targetStudent?.scholarNumber ?: "-"
 
         ImageEnhancer.processAndOptimizePhotoAsync(photoFile, object : ImageEnhancer.AiOptimizationCallback {
             override fun onSuccess(result: ImageEnhancer.AiOptimizedResult) {
                 runOnUiThread {
-                    statusMessage = "Uploading to school server..."
-                    apiClient.uploadPhotoDirectBase64(targetStudentId, result.base64Image, ApiResponses.PhotoUploadResponse::class.java, object : ApiClient.ApiCallback<ApiResponses.PhotoUploadResponse> {
-                        override fun onSuccess(response: ApiResponses.PhotoUploadResponse) {
-                            runOnUiThread {
-                                isUploading = false
-                                if (response.success) {
-                                    apiClient.evictFromImageCache(response.photoUrl)
-                                    apiClient.cacheBitmap(response.photoUrl, result.bitmap)
-                                    // Update in-memory list
-                                    val index = studentsList.indexOfFirst { it.id == targetStudentId }
-                                    if (index != -1) {
-                                        val student = studentsList[index]
-                                        student.photoUrl = response.photoUrl
-                                        studentsList[index] = student
-                                    }
-                                    Toast.makeText(this@PhotoDeskActivity, "📸 ${result.summaryText}", Toast.LENGTH_LONG).show()
-                                } else {
-                                    Toast.makeText(this@PhotoDeskActivity, response.message, Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        }
+                    // Enqueue to background queue and cache in memory immediately!
+                    val tempKey = uploadManager.enqueue(
+                        currentTargetId,
+                        false,
+                        sName,
+                        sScholar,
+                        result.bitmap,
+                        result.base64Image
+                    )
 
-                        override fun onError(errorMessage: String) {
-                            runOnUiThread {
-                                isUploading = false
-                                Toast.makeText(this@PhotoDeskActivity, "Upload Error: $errorMessage", Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    })
+                    // 0ms Optimistic UI Update: photo appears immediately!
+                    val index = studentsList.indexOfFirst { it.id == currentTargetId }
+                    if (index != -1) {
+                        val student = studentsList[index]
+                        student.photoUrl = tempKey
+                        studentsList[index] = student
+                    }
+
+                    Toast.makeText(this@PhotoDeskActivity, "📸 ${result.summaryText}\nSyncing in background...", Toast.LENGTH_SHORT).show()
                 }
             }
 
             override fun onError(errorMessage: String) {
                 runOnUiThread {
-                    isUploading = false
                     Toast.makeText(this@PhotoDeskActivity, errorMessage, Toast.LENGTH_SHORT).show()
                 }
             }
@@ -515,7 +539,7 @@ class PhotoDeskActivity : ComponentActivity() {
                 }
 
                 // Loading or Uploading banner
-                AnimatedVisibility(visible = isUploading) {
+                AnimatedVisibility(visible = queueRemaining > 0 || queueActive > 0) {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -524,16 +548,21 @@ class PhotoDeskActivity : ComponentActivity() {
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF0369A1))
                     ) {
                         Row(
-                            modifier = Modifier.padding(12.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(18.dp),
                                 strokeWidth = 2.dp,
                                 color = Color.White
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = statusMessage, color = Color.White, fontSize = 13.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "☁️ Background Uploading: $queueRemaining in queue (Active: $queueActive)",
+                                color = Color.White,
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                     }
                 }

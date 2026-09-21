@@ -81,6 +81,40 @@ public class MainActivity extends AppCompatActivity implements
     // 3. Exams Tab Components
     private TextView tvExamsContent;
 
+    private final com.asacademy.schoolapp.utils.PhotoUploadManager.UploadListener uploadListener = new com.asacademy.schoolapp.utils.PhotoUploadManager.UploadListener() {
+        @Override
+        public void onQueueProgress(int remainingCount, int uploadingCount, int completedCount) {}
+
+        @Override
+        public void onItemStatusChanged(com.asacademy.schoolapp.utils.PhotoUploadManager.UploadItem item) {
+            if (item.status == com.asacademy.schoolapp.utils.PhotoUploadManager.Status.SUCCESS && item.serverPhotoUrl != null) {
+                runOnUiThread(() -> {
+                    if (item.isPreviousStudent) {
+                        if (previousAdapter != null && previousAdapter.getStudents() != null) {
+                            for (PreviousStudent ps : previousAdapter.getStudents()) {
+                                if (ps.id == item.studentId) {
+                                    ps.photoUrl = item.serverPhotoUrl;
+                                    previousAdapter.updateStudent(ps);
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        if (studentAdapter != null && studentAdapter.getStudents() != null) {
+                            for (Student s : studentAdapter.getStudents()) {
+                                if (s.id == item.studentId) {
+                                    s.photoUrl = item.serverPhotoUrl;
+                                    studentAdapter.updateStudent(s);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -88,6 +122,8 @@ public class MainActivity extends AppCompatActivity implements
 
         apiClient = ApiClient.getInstance(this);
         currentUser = (User) getIntent().getSerializableExtra("user");
+
+        com.asacademy.schoolapp.utils.PhotoUploadManager.getInstance(this).registerListener(uploadListener);
 
         initViews();
         setupTopHeader();
@@ -101,6 +137,12 @@ public class MainActivity extends AppCompatActivity implements
 
         // 🚀 Check for GitHub Release updates automatically (silent check)
         com.asacademy.schoolapp.utils.AppUpdateManager.checkForUpdate(this, false);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        com.asacademy.schoolapp.utils.PhotoUploadManager.getInstance(this).unregisterListener(uploadListener);
     }
 
     @Override
@@ -448,7 +490,11 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     private void loadStudents() {
-        progressBar.setVisibility(View.VISIBLE);
+        if (studentAdapter == null || studentAdapter.getItemCount() == 0) {
+            progressBar.setVisibility(View.VISIBLE);
+        } else {
+            swipeRefresh.setRefreshing(true);
+        }
         String search = etSearch.getText().toString().trim();
         String endpoint = "api/mobile/students?classId=" + selectedClassId + "&wing=" + selectedActiveWing + "&search=" + UriEncode(search);
 
@@ -472,7 +518,11 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     private void loadPreviousStudents() {
-        progressBar.setVisibility(View.VISIBLE);
+        if (previousAdapter == null || previousAdapter.getItemCount() == 0) {
+            progressBar.setVisibility(View.VISIBLE);
+        } else {
+            swipeRefresh.setRefreshing(true);
+        }
         String search = etSearch.getText().toString().trim();
         String endpoint = "api/mobile/previous-students?status=" + selectedArchiveStatus + "&wing=" + selectedArchiveWing + "&search=" + UriEncode(search);
 
@@ -540,6 +590,9 @@ public class MainActivity extends AppCompatActivity implements
 
     @Override
     public void onStudentClick(Student student) {
+        if (studentAdapter != null) {
+            com.asacademy.schoolapp.utils.StudentNavigationManager.setActiveStudents(studentAdapter.getStudents(), student);
+        }
         Intent intent = new Intent(this, StudentDetailActivity.class);
         intent.putExtra("student", student);
         startActivityForResult(intent, REQ_EDIT_STUDENT);
@@ -547,6 +600,9 @@ public class MainActivity extends AppCompatActivity implements
 
     @Override
     public void onCameraClick(Student student) {
+        if (studentAdapter != null) {
+            com.asacademy.schoolapp.utils.StudentNavigationManager.setActiveStudents(studentAdapter.getStudents(), student);
+        }
         Intent intent = new Intent(this, StudentDetailActivity.class);
         intent.putExtra("student", student);
         startActivityForResult(intent, REQ_EDIT_STUDENT);
@@ -554,6 +610,9 @@ public class MainActivity extends AppCompatActivity implements
 
     @Override
     public void onPreviousStudentClick(PreviousStudent student) {
+        if (previousAdapter != null) {
+            com.asacademy.schoolapp.utils.StudentNavigationManager.setPreviousStudents(previousAdapter.getStudents(), student);
+        }
         Intent intent = new Intent(this, PreviousStudentEditActivity.class);
         intent.putExtra("student", student);
         startActivityForResult(intent, REQ_EDIT_STUDENT);
@@ -563,7 +622,26 @@ public class MainActivity extends AppCompatActivity implements
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQ_EDIT_STUDENT && resultCode == RESULT_OK) {
-            refreshCurrentTab();
+            boolean updatedInPlace = false;
+            if (data != null) {
+                if (data.hasExtra("updated_student")) {
+                    Student s = (Student) data.getSerializableExtra("updated_student");
+                    if (studentAdapter != null && s != null) {
+                        studentAdapter.updateStudent(s);
+                        updatedInPlace = true;
+                    }
+                }
+                if (data.hasExtra("updated_previous_student")) {
+                    PreviousStudent ps = (PreviousStudent) data.getSerializableExtra("updated_previous_student");
+                    if (previousAdapter != null && ps != null) {
+                        previousAdapter.updateStudent(ps);
+                        updatedInPlace = true;
+                    }
+                }
+            }
+            if (!updatedInPlace) {
+                refreshCurrentTab();
+            }
         }
     }
 

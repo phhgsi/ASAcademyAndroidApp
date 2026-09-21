@@ -12,7 +12,7 @@ android {
         minSdk 21
         targetSdk 34
         versionCode project.hasProperty('appVersionCode') ? project.property('appVersionCode').toInteger() : 5
-        versionName project.hasProperty('appVersionName') ? project.property('appVersionName').toString() : "1.4"
+        versionName project.hasProperty('appVersionName') ? project.property('appVersionName').toString() : "1.5"
     }
 
     buildTypes {

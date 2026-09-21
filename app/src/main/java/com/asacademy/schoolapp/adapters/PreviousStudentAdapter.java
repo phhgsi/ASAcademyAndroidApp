@@ -36,6 +36,21 @@ public class PreviousStudentAdapter extends RecyclerView.Adapter<PreviousStudent
         notifyDataSetChanged();
     }
 
+    public List<PreviousStudent> getStudents() {
+        return students;
+    }
+
+    public void updateStudent(PreviousStudent updated) {
+        if (updated == null || students == null) return;
+        for (int i = 0; i < students.size(); i++) {
+            if (students.get(i).id == updated.id) {
+                students.set(i, updated);
+                notifyItemChanged(i);
+                return;
+            }
+        }
+    }
+
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {

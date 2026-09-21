@@ -31,6 +31,8 @@ import com.asacademy.schoolapp.models.ApiResponses;
 import com.asacademy.schoolapp.models.PreviousStudent;
 import com.asacademy.schoolapp.network.ApiClient;
 import com.asacademy.schoolapp.utils.ImageEnhancer;
+import com.asacademy.schoolapp.utils.PhotoUploadManager;
+import com.asacademy.schoolapp.utils.StudentNavigationManager;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -51,6 +53,11 @@ public class PreviousStudentEditActivity extends AppCompatActivity {
 
     private PreviousStudent student;
     private ApiClient apiClient;
+    private PhotoUploadManager uploadManager;
+
+    private View layoutStudentNav;
+    private Button btnNavPrev, btnNavNext;
+    private TextView tvNavPosition, tvPhotoSyncStatus;
 
     private ImageView ivAvatar;
     private TextView tvAvatarInitial;
@@ -65,12 +72,40 @@ public class PreviousStudentEditActivity extends AppCompatActivity {
     private Button btnSave, btnDelete;
     private ProgressBar progressBar;
 
+    private final PhotoUploadManager.UploadListener uploadListener = new PhotoUploadManager.UploadListener() {
+        @Override
+        public void onQueueProgress(int remainingCount, int uploadingCount, int completedCount) {}
+
+        @Override
+        public void onItemStatusChanged(PhotoUploadManager.UploadItem item) {
+            if (student != null && item.studentId == student.id && item.isPreviousStudent) {
+                runOnUiThread(() -> {
+                    if (item.status == PhotoUploadManager.Status.SUCCESS && item.serverPhotoUrl != null) {
+                        student.photoUrl = item.serverPhotoUrl;
+                        StudentNavigationManager.updatePreviousStudent(student);
+                        if (tvPhotoSyncStatus != null) {
+                            tvPhotoSyncStatus.setText("✅ Photo synced to server");
+                            tvPhotoSyncStatus.setVisibility(View.VISIBLE);
+                        }
+                    } else if (item.status == PhotoUploadManager.Status.FAILED) {
+                        if (tvPhotoSyncStatus != null) {
+                            tvPhotoSyncStatus.setText("⚠️ Upload failed: " + (item.error != null ? item.error : "Network error"));
+                            tvPhotoSyncStatus.setVisibility(View.VISIBLE);
+                        }
+                    }
+                });
+            }
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_previous_student_edit);
 
         apiClient = ApiClient.getInstance(this);
+        uploadManager = PhotoUploadManager.getInstance(this);
+        uploadManager.registerListener(uploadListener);
 
         student = (PreviousStudent) getIntent().getSerializableExtra("student");
         if (student == null) {
@@ -82,9 +117,24 @@ public class PreviousStudentEditActivity extends AppCompatActivity {
         initViews();
         populateData();
         setupListeners();
+        updateNavigationUi();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (uploadManager != null) {
+            uploadManager.unregisterListener(uploadListener);
+        }
     }
 
     private void initViews() {
+        layoutStudentNav = findViewById(R.id.layoutStudentNav);
+        btnNavPrev = findViewById(R.id.btnNavPrev);
+        btnNavNext = findViewById(R.id.btnNavNext);
+        tvNavPosition = findViewById(R.id.tvNavPosition);
+        tvPhotoSyncStatus = findViewById(R.id.tvPhotoSyncStatus);
+
         ivAvatar = findViewById(R.id.ivAvatar);
         tvAvatarInitial = findViewById(R.id.tvAvatarInitial);
         btnTakePhoto = findViewById(R.id.btnTakePhoto);
@@ -258,6 +308,50 @@ public class PreviousStudentEditActivity extends AppCompatActivity {
 
         btnSave.setOnClickListener(v -> saveRecord());
         btnDelete.setOnClickListener(v -> confirmDelete());
+
+        if (btnNavPrev != null) {
+            btnNavPrev.setOnClickListener(v -> navigateStudent(false));
+        }
+        if (btnNavNext != null) {
+            btnNavNext.setOnClickListener(v -> navigateStudent(true));
+        }
+    }
+
+    private void updateNavigationUi() {
+        if (layoutStudentNav == null) return;
+        if (StudentNavigationManager.getPreviousTotalCount() > 1) {
+            layoutStudentNav.setVisibility(View.VISIBLE);
+            int current = StudentNavigationManager.getPreviousCurrentIndex() + 1;
+            int total = StudentNavigationManager.getPreviousTotalCount();
+            if (tvNavPosition != null) {
+                tvNavPosition.setText("Student " + current + " of " + total);
+            }
+            if (btnNavPrev != null) {
+                btnNavPrev.setEnabled(StudentNavigationManager.hasPreviousPrev());
+                btnNavPrev.setAlpha(StudentNavigationManager.hasPreviousPrev() ? 1.0f : 0.35f);
+            }
+            if (btnNavNext != null) {
+                btnNavNext.setEnabled(StudentNavigationManager.hasPreviousNext());
+                btnNavNext.setAlpha(StudentNavigationManager.hasPreviousNext() ? 1.0f : 0.35f);
+            }
+        } else {
+            layoutStudentNav.setVisibility(View.GONE);
+        }
+    }
+
+    private void navigateStudent(boolean forward) {
+        PreviousStudent target = forward ? StudentNavigationManager.getPreviousNext() : StudentNavigationManager.getPreviousPrev();
+        if (target != null) {
+            student = target;
+            populateData();
+            updateNavigationUi();
+            if (tvPhotoSyncStatus != null) {
+                tvPhotoSyncStatus.setVisibility(View.GONE);
+            }
+            Intent res = new Intent();
+            res.putExtra("updated_previous_student", student);
+            setResult(RESULT_OK, res);
+        }
     }
 
     private void showPhotoOptionsDialog() {
@@ -362,47 +456,53 @@ public class PreviousStudentEditActivity extends AppCompatActivity {
     }
 
     private void compressAndUploadPhoto(File photoFile) {
-        progressBar.setVisibility(View.VISIBLE);
-        btnTakePhoto.setEnabled(false);
+        if (tvPhotoSyncStatus != null) {
+            tvPhotoSyncStatus.setText("⚡ Auto-framing & optimizing photo...");
+            tvPhotoSyncStatus.setVisibility(View.VISIBLE);
+        }
 
         ImageEnhancer.processAndOptimizePhotoAsync(photoFile, new ImageEnhancer.AiOptimizationCallback() {
             @Override
             public void onSuccess(ImageEnhancer.AiOptimizedResult result) {
                 runOnUiThread(() -> {
+                    // 1. Instant preview
                     ivAvatar.setImageBitmap(result.bitmap);
                     ivAvatar.setVisibility(View.VISIBLE);
                     tvAvatarInitial.setVisibility(View.GONE);
 
-                    apiClient.uploadPreviousStudentPhotoDirectBase64(student.id, result.base64Image, ApiResponses.PhotoUploadResponse.class, new ApiClient.ApiCallback<ApiResponses.PhotoUploadResponse>() {
-                        @Override
-                        public void onSuccess(ApiResponses.PhotoUploadResponse response) {
-                            progressBar.setVisibility(View.GONE);
-                            btnTakePhoto.setEnabled(true);
-                            if (response.success) {
-                                student.photoUrl = response.photoUrl;
-                                apiClient.evictFromImageCache(response.photoUrl);
-                                apiClient.cacheBitmap(response.photoUrl, result.bitmap);
-                                Toast.makeText(PreviousStudentEditActivity.this, result.summaryText, Toast.LENGTH_LONG).show();
-                            } else {
-                                Toast.makeText(PreviousStudentEditActivity.this, response.message, Toast.LENGTH_LONG).show();
-                            }
-                        }
+                    // 2. Background queue upload
+                    String tempKey = uploadManager.enqueue(
+                            student.id,
+                            true,
+                            student.name,
+                            student.scholarNumber,
+                            result.bitmap,
+                            result.base64Image
+                    );
 
-                        @Override
-                        public void onError(String errorMessage) {
-                            progressBar.setVisibility(View.GONE);
-                            btnTakePhoto.setEnabled(true);
-                            Toast.makeText(PreviousStudentEditActivity.this, "Upload Error: " + errorMessage, Toast.LENGTH_LONG).show();
-                        }
-                    });
+                    student.photoUrl = tempKey;
+                    StudentNavigationManager.updatePreviousStudent(student);
+
+                    if (tvPhotoSyncStatus != null) {
+                        tvPhotoSyncStatus.setText("☁️ Photo syncing in background...");
+                        tvPhotoSyncStatus.setVisibility(View.VISIBLE);
+                    }
+
+                    // In-place result
+                    Intent res = new Intent();
+                    res.putExtra("updated_previous_student", student);
+                    setResult(RESULT_OK, res);
+
+                    Toast.makeText(PreviousStudentEditActivity.this, "📸 " + result.summaryText + "\nSyncing in background...", Toast.LENGTH_SHORT).show();
                 });
             }
 
             @Override
             public void onError(String errorMessage) {
                 runOnUiThread(() -> {
-                    progressBar.setVisibility(View.GONE);
-                    btnTakePhoto.setEnabled(true);
+                    if (tvPhotoSyncStatus != null) {
+                        tvPhotoSyncStatus.setText("❌ " + errorMessage);
+                    }
                     Toast.makeText(PreviousStudentEditActivity.this, errorMessage, Toast.LENGTH_SHORT).show();
                 });
             }
@@ -433,25 +533,41 @@ public class PreviousStudentEditActivity extends AppCompatActivity {
         progressBar.setVisibility(View.VISIBLE);
         btnSave.setEnabled(false);
 
+        String wing = spWing.getSelectedItemPosition() == 1 ? "Secondary" : "Primary";
+        String nameHindi = etNameHindi.getText().toString().trim();
+        String fatherName = etFatherName.getText().toString().trim();
+        String fatherNameHindi = etFatherNameHindi.getText().toString().trim();
+        String motherName = etMotherName.getText().toString().trim();
+        String motherNameHindi = etMotherNameHindi.getText().toString().trim();
+        String className = etClass.getText().toString().trim();
+        String status = spStatus.getSelectedItem().toString();
+        String sssmid = etSssmid.getText().toString().trim();
+        String aadhar = etAadhar.getText().toString().trim();
+        String dob = etDob.getText().toString().trim();
+        String gender = spGender.getSelectedItem().toString();
+        String category = spCategory.getSelectedItem().toString();
+        String address = etAddress.getText().toString().trim();
+        String tcDetails = etTcDetails.getText().toString().trim();
+
         Map<String, Object> body = new HashMap<>();
         body.put("id", student.id);
         body.put("scholarNumber", scholarNum);
-        body.put("wing", spWing.getSelectedItemPosition() == 1 ? "Secondary" : "Primary");
+        body.put("wing", wing);
         body.put("name", name);
-        body.put("nameHindi", etNameHindi.getText().toString().trim());
-        body.put("fatherName", etFatherName.getText().toString().trim());
-        body.put("fatherNameHindi", etFatherNameHindi.getText().toString().trim());
-        body.put("motherName", etMotherName.getText().toString().trim());
-        body.put("motherNameHindi", etMotherNameHindi.getText().toString().trim());
-        body.put("class", etClass.getText().toString().trim());
-        body.put("status", spStatus.getSelectedItem().toString());
-        body.put("sssmid", etSssmid.getText().toString().trim());
-        body.put("aadhar", etAadhar.getText().toString().trim());
-        body.put("dob", etDob.getText().toString().trim());
-        body.put("gender", spGender.getSelectedItem().toString());
-        body.put("category", spCategory.getSelectedItem().toString());
-        body.put("address", etAddress.getText().toString().trim());
-        body.put("tcDetails", etTcDetails.getText().toString().trim());
+        body.put("nameHindi", nameHindi);
+        body.put("fatherName", fatherName);
+        body.put("fatherNameHindi", fatherNameHindi);
+        body.put("motherName", motherName);
+        body.put("motherNameHindi", motherNameHindi);
+        body.put("class", className);
+        body.put("status", status);
+        body.put("sssmid", sssmid);
+        body.put("aadhar", aadhar);
+        body.put("dob", dob);
+        body.put("gender", gender);
+        body.put("category", category);
+        body.put("address", address);
+        body.put("tcDetails", tcDetails);
 
         apiClient.post("api/mobile/previous-students/save", body, ApiResponses.SimpleResponse.class, new ApiClient.ApiCallback<ApiResponses.SimpleResponse>() {
             @Override
@@ -459,8 +575,21 @@ public class PreviousStudentEditActivity extends AppCompatActivity {
                 progressBar.setVisibility(View.GONE);
                 btnSave.setEnabled(true);
                 if (result.success) {
+                    student.scholarNumber = scholarNum;
+                    student.wing = wing;
+                    student.name = name;
+                    student.nameHindi = nameHindi;
+                    student.fatherName = fatherName;
+                    student.className = className;
+                    student.status = status;
+                    student.sssmid = sssmid;
+                    StudentNavigationManager.updatePreviousStudent(student);
+
+                    Intent res = new Intent();
+                    res.putExtra("updated_previous_student", student);
+                    setResult(RESULT_OK, res);
+
                     Toast.makeText(PreviousStudentEditActivity.this, "Permanent register updated!", Toast.LENGTH_SHORT).show();
-                    setResult(RESULT_OK);
                 } else {
                     Toast.makeText(PreviousStudentEditActivity.this, result.message, Toast.LENGTH_LONG).show();
                 }
@@ -473,8 +602,6 @@ public class PreviousStudentEditActivity extends AppCompatActivity {
                 Toast.makeText(PreviousStudentEditActivity.this, errorMessage, Toast.LENGTH_LONG).show();
             }
         });
-    }
-
     private void confirmDelete() {
         new AlertDialog.Builder(this)
                 .setTitle("Delete Archive Record")
