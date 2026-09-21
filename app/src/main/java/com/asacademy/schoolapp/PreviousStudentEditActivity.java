@@ -602,6 +602,8 @@ public class PreviousStudentEditActivity extends AppCompatActivity {
                 Toast.makeText(PreviousStudentEditActivity.this, errorMessage, Toast.LENGTH_LONG).show();
             }
         });
+    }
+
     private void confirmDelete() {
         new AlertDialog.Builder(this)
                 .setTitle("Delete Archive Record")
