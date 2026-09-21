@@ -236,7 +236,13 @@ public class MainActivity extends AppCompatActivity implements
         tvStatAttendance = findViewById(R.id.tvStatAttendance);
 
         if (btnQuickPhotoDesk != null) {
-            btnQuickPhotoDesk.setOnClickListener(v -> startActivity(new Intent(this, PhotoDeskActivity.class)));
+            btnQuickPhotoDesk.setOnClickListener(v -> {
+                Intent intent = new Intent(this, PhotoDeskActivity.class);
+                if (selectedClassId > 0) {
+                    intent.putExtra("class_id", selectedClassId);
+                }
+                startActivity(intent);
+            });
         }
         if (btnQuickAttendance != null) {
             btnQuickAttendance.setOnClickListener(v -> startActivity(new Intent(this, AttendanceActivity.class)));

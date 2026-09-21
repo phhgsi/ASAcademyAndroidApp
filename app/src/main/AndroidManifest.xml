@@ -100,6 +100,12 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".InAppCameraActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.ASAcademy" />
+
+        <activity
             android:name=".StudentIdCardActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustPan" />

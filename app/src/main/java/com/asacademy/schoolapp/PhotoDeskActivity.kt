@@ -1,20 +1,15 @@
 package com.asacademy.schoolapp
 
-import android.Manifest
-import android.app.AlertDialog
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.net.Uri
 import android.os.Bundle
-import android.os.Environment
-import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,6 +18,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -39,8 +35,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import com.asacademy.schoolapp.models.ApiResponses
 import com.asacademy.schoolapp.models.SchoolClass
 import com.asacademy.schoolapp.models.Student
@@ -48,18 +42,21 @@ import com.asacademy.schoolapp.network.ApiClient
 import com.asacademy.schoolapp.utils.ImageEnhancer
 import com.asacademy.schoolapp.utils.PhotoUploadManager
 import java.io.File
-import java.io.FileOutputStream
-import java.io.InputStream
-import java.text.SimpleDateFormat
-import java.util.*
 
+/**
+ * Kyant0 Liquid Glass Rapid Photo Desk.
+ * - Single-class locked studio capture (prevents OOMs and large dumps)
+ * - In-app CameraX studio viewfinder (no process death, zero activity reload)
+ * - Kyant0 Liquid Glass UI with frosted acrylic, neon cyber borders, and squircle pills
+ */
 class PhotoDeskActivity : ComponentActivity() {
 
     private lateinit var apiClient: ApiClient
     private lateinit var uploadManager: PhotoUploadManager
     private var targetStudentId: Int = 0
-    private var currentPhotoFile: File? = null
-    private var photoUri: Uri? = null
+
+    private val PREFS_NAME = "PhotoDeskPrefs"
+    private val KEY_LOCKED_CLASS_ID = "photo_desk_locked_class_id"
 
     // State holders
     private val studentsList = mutableStateListOf<Student>()
@@ -95,26 +92,16 @@ class PhotoDeskActivity : ComponentActivity() {
         }
     }
 
-    // Camera launcher
-    private val cameraLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK && currentPhotoFile != null && currentPhotoFile!!.exists()) {
-            processAndUploadCapturedPhoto(currentPhotoFile!!)
-        }
-    }
-
-    // Gallery launcher
-    private val galleryLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK && result.data?.data != null) {
-            handleGalleryUri(result.data!!.data!!)
-        }
-    }
-
-    // Permission launcher
-    private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-        if (isGranted) {
-            launchNativeCamera()
-        } else {
-            Toast.makeText(this, "Camera permission is required to snap photos.", Toast.LENGTH_SHORT).show()
+    // In-App CameraX Studio Launcher: Runs 100% inside app process. Zero OS reloads!
+    private val inAppCameraLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK && result.data != null) {
+            val imagePath = result.data?.getStringExtra(InAppCameraActivity.EXTRA_IMAGE_PATH)
+            if (!imagePath.isNullOrBlank()) {
+                val photoFile = File(imagePath)
+                if (photoFile.exists()) {
+                    processAndUploadCapturedPhoto(photoFile)
+                }
+            }
         }
     }
 
@@ -124,17 +111,32 @@ class PhotoDeskActivity : ComponentActivity() {
         uploadManager = PhotoUploadManager.getInstance(this)
         uploadManager.registerListener(uploadListener)
 
+        // Restore or initialize locked single class
+        val intentClassId = intent.getIntExtra("class_id", -1)
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        if (intentClassId > 0) {
+            selectedClassId = intentClassId
+            prefs.edit().putInt(KEY_LOCKED_CLASS_ID, intentClassId).apply()
+        } else {
+            val saved = prefs.getInt(KEY_LOCKED_CLASS_ID, 0)
+            if (saved > 0) {
+                selectedClassId = saved
+            }
+        }
+
         loadClasses()
-        loadStudents()
+        if (selectedClassId != null && selectedClassId!! > 0) {
+            loadStudents()
+        }
 
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme(
                     primary = Color(0xFF38BDF8),
                     secondary = Color(0xFF818CF8),
-                    background = Color(0xFF0F172A),
-                    surface = Color(0xFF1E293B),
-                    surfaceVariant = Color(0xFF334155),
+                    background = Color(0xFF0B0F19),
+                    surface = Color(0xFF161F30),
+                    surfaceVariant = Color(0xFF1E293B),
                     onPrimary = Color.White,
                     onBackground = Color(0xFFF1F5F9),
                     onSurface = Color(0xFFE2E8F0)
@@ -151,6 +153,16 @@ class PhotoDeskActivity : ComponentActivity() {
                 if (result.success && result.data != null) {
                     classList.clear()
                     classList.addAll(result.data)
+
+                    // Strict single-class locking: if nothing selected or invalid, lock to first class
+                    val currentId = selectedClassId
+                    if ((currentId == null || currentId <= 0 || classList.none { it.id == currentId }) && classList.isNotEmpty()) {
+                        val firstId = classList.first().id
+                        selectedClassId = firstId
+                        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                            .edit().putInt(KEY_LOCKED_CLASS_ID, firstId).apply()
+                        loadStudents()
+                    }
                 }
             }
 
@@ -161,11 +173,11 @@ class PhotoDeskActivity : ComponentActivity() {
     }
 
     private fun loadStudents() {
+        val classId = selectedClassId ?: return
+        if (classId <= 0) return
+
         isLoading = true
-        var endpoint = "api/mobile/students?"
-        if (selectedClassId != null && selectedClassId!! > 0) {
-            endpoint += "classId=$selectedClassId&"
-        }
+        val endpoint = "api/mobile/students?classId=$classId"
         apiClient.get(endpoint, ApiResponses.StudentListResponse::class.java, object : ApiClient.ApiCallback<ApiResponses.StudentListResponse> {
             override fun onSuccess(result: ApiResponses.StudentListResponse) {
                 runOnUiThread {
@@ -188,75 +200,15 @@ class PhotoDeskActivity : ComponentActivity() {
 
     private fun promptPhotoSource(studentId: Int) {
         targetStudentId = studentId
-        val options = arrayOf("📷 Take Photo with Camera", "🖼️ Choose from Gallery", "❌ Cancel")
-        AlertDialog.Builder(this)
-            .setTitle("Snap Student Photo")
-            .setItems(options) { dialog, which ->
-                when (which) {
-                    0 -> {
-                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                            launchNativeCamera()
-                        } else {
-                            permissionLauncher.launch(Manifest.permission.CAMERA)
-                        }
-                    }
-                    1 -> launchGalleryPicker()
-                    else -> dialog.dismiss()
-                }
-            }
-            .show()
-    }
+        val targetStudent = studentsList.firstOrNull { it.id == targetStudentId }
 
-    private fun launchNativeCamera() {
-        try {
-            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
-            currentPhotoFile = File.createTempFile("STUDENT_${targetStudentId}_${timeStamp}_", ".jpg", storageDir)
-            if (currentPhotoFile != null) {
-                photoUri = FileProvider.getUriForFile(this, "$packageName.provider", currentPhotoFile!!)
-                val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
-                    putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-                }
-                cameraLauncher.launch(intent)
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "Failed to launch camera: ${e.message}", Toast.LENGTH_SHORT).show()
+        val intent = Intent(this, InAppCameraActivity::class.java).apply {
+            putExtra(InAppCameraActivity.EXTRA_STUDENT_ID, targetStudentId)
+            putExtra(InAppCameraActivity.EXTRA_STUDENT_NAME, targetStudent?.fullName ?: "")
+            putExtra(InAppCameraActivity.EXTRA_SCHOLAR_NUM, targetStudent?.scholarNumber ?: "")
+            putExtra(InAppCameraActivity.EXTRA_CLASS_NAME, targetStudent?.className ?: "")
         }
-    }
-
-    private fun launchGalleryPicker() {
-        try {
-            val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                type = "image/*"
-                addCategory(Intent.CATEGORY_OPENABLE)
-            }
-            galleryLauncher.launch(Intent.createChooser(intent, "Select Student Photo"))
-        } catch (e: Exception) {
-            Toast.makeText(this, "Failed to open gallery: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun handleGalleryUri(uri: Uri) {
-        try {
-            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
-            currentPhotoFile = File.createTempFile("GALLERY_${targetStudentId}_${timeStamp}_", ".jpg", storageDir)
-            val inputStream: InputStream? = contentResolver.openInputStream(uri)
-            if (inputStream != null && currentPhotoFile != null) {
-                val fos = FileOutputStream(currentPhotoFile)
-                val buffer = ByteArray(8192)
-                var len: Int
-                while (inputStream.read(buffer).also { len = it } > 0) {
-                    fos.write(buffer, 0, len)
-                }
-                fos.close()
-                inputStream.close()
-                processAndUploadCapturedPhoto(currentPhotoFile!!)
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "Failed to process gallery image: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
+        inAppCameraLauncher.launch(intent)
     }
 
     override fun onDestroy() {
@@ -291,7 +243,7 @@ class PhotoDeskActivity : ComponentActivity() {
                         studentsList[index] = student
                     }
 
-                    Toast.makeText(this@PhotoDeskActivity, "📸 ${result.summaryText}\nSyncing in background...", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@PhotoDeskActivity, "⚡ ${result.summaryText}\nSyncing in background...", Toast.LENGTH_SHORT).show()
                 }
             }
 
@@ -306,6 +258,9 @@ class PhotoDeskActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun PhotoDeskScreen() {
+        val currentClass = classList.firstOrNull { it.id == selectedClassId }
+        val classNameDisplay = currentClass?.className ?: "Selected Class"
+
         val filteredStudents = remember(studentsList.toList(), activeFilter, searchQuery, selectedClassId) {
             studentsList.filter { student ->
                 val matchesClass = if (selectedClassId == null || selectedClassId == 0) true else student.classId == selectedClassId
@@ -335,14 +290,30 @@ class PhotoDeskActivity : ComponentActivity() {
                 TopAppBar(
                     title = {
                         Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "📸 Photo Studio",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = Color(0x3338BDF8),
+                                    border = BorderStroke(1.dp, Color(0x6638BDF8))
+                                ) {
+                                    Text(
+                                        text = classNameDisplay,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF38BDF8)
+                                    )
+                                }
+                            }
                             Text(
-                                text = "📸 Rapid Photo Desk",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "Bulk Studio Capture & AI Auto-Framing",
+                                text = "Liquid Glass Studio • Single Class Locked",
                                 fontSize = 11.5.sp,
                                 color = Color(0xFF94A3B8)
                             )
@@ -358,10 +329,10 @@ class PhotoDeskActivity : ComponentActivity() {
                             Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color(0xFF38BDF8))
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF0F172A))
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF0B0F19))
                 )
             },
-            containerColor = Color(0xFF0F172A)
+            containerColor = Color(0xFF0B0F19)
         ) { paddingValues ->
             Column(
                 modifier = Modifier
@@ -369,21 +340,22 @@ class PhotoDeskActivity : ComponentActivity() {
                     .padding(paddingValues)
                     .padding(horizontal = 14.dp)
             ) {
-                // Header Stat Card (Liquid Glass & Capsule Style)
+                // Kyant0 Liquid Glass Stat Card with glowing neon border
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 8.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF161F30)),
+                    border = BorderStroke(1.dp, Color(0x3338BDF8)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
                                 Brush.linearGradient(
-                                    listOf(Color(0xFF1E293B), Color(0xFF0F172A).copy(alpha = 0.8f))
+                                    listOf(Color(0xFF161F30), Color(0xFF0E1626))
                                 )
                             )
                             .padding(16.dp)
@@ -395,54 +367,114 @@ class PhotoDeskActivity : ComponentActivity() {
                         ) {
                             Column {
                                 Text(
-                                    text = "Studio Progress",
+                                    text = "$classNameDisplay Progress",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = Color(0xFF94A3B8)
                                 )
                                 Text(
                                     text = "$withPhotoCount / $totalCount Captured",
-                                    fontSize = 18.sp,
+                                    fontSize = 19.sp,
                                     fontWeight = FontWeight.Black,
                                     color = Color.White
                                 )
                             }
                             Surface(
                                 shape = RoundedCornerShape(50),
-                                color = if (missingPhotoCount == 0) Color(0xFF10B981) else Color(0xFFF59E0B)
+                                color = if (missingPhotoCount == 0) Color(0x3310B981) else Color(0x33F59E0B),
+                                border = BorderStroke(1.dp, if (missingPhotoCount == 0) Color(0xFF10B981) else Color(0xFFF59E0B))
                             ) {
                                 Text(
-                                    text = if (missingPhotoCount == 0) "100% Done" else "$missingPhotoCount Missing",
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    text = if (missingPhotoCount == 0) "✨ 100% Ready" else "⚠️ $missingPhotoCount Left",
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = if (missingPhotoCount == 0) Color(0xFF34D399) else Color(0xFFFBBF24)
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         LinearProgressIndicator(
                             progress = { animatedProgress },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp)),
+                                .clip(RoundedCornerShape(50)),
                             color = Color(0xFF38BDF8),
-                            trackColor = Color(0xFF334155),
+                            trackColor = Color(0xFF1E293B),
                         )
                     }
                 }
 
-                // Search Bar
+                // Kyant0 Single-Class Locked Selector Strip (NO "All Classes" dumping)
+                if (classList.isNotEmpty()) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Text(
+                            text = "SELECT CLASS (LOCKED):",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF64748B),
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(classList) { cls ->
+                                val isSelected = selectedClassId == cls.id
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = if (isSelected) Color(0xFF0284C7) else Color(0xFF161F30),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isSelected) Color(0xFF38BDF8) else Color(0x33334155)
+                                    ),
+                                    modifier = Modifier.clickable {
+                                        if (selectedClassId != cls.id) {
+                                            selectedClassId = cls.id
+                                            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                                                .edit().putInt(KEY_LOCKED_CLASS_ID, cls.id).apply()
+                                            loadStudents()
+                                        }
+                                    }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (isSelected) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(6.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color.White)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                        }
+                                        Text(
+                                            text = cls.className ?: "Class",
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) Color.White else Color(0xFF94A3B8)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Kyant0 Liquid Search Bar
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    placeholder = { Text("Search by student or scholar number...", fontSize = 13.sp, color = Color(0xFF94A3B8)) },
+                        .padding(vertical = 6.dp),
+                    placeholder = { Text("Search by name, scholar no, father...", fontSize = 13.sp, color = Color(0xFF64748B)) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", tint = Color(0xFF38BDF8)) },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
@@ -454,114 +486,78 @@ class PhotoDeskActivity : ComponentActivity() {
                     shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFF38BDF8),
-                        unfocusedBorderColor = Color(0xFF334155),
-                        focusedContainerColor = Color(0xFF1E293B),
-                        unfocusedContainerColor = Color(0xFF1E293B),
+                        unfocusedBorderColor = Color(0x3338BDF8),
+                        focusedContainerColor = Color(0xFF161F30),
+                        unfocusedContainerColor = Color(0xFF161F30),
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White
                     ),
                     singleLine = true
                 )
 
-                // Class Selection Chips Row
-                if (classList.isNotEmpty()) {
-                    LazyRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp, bottom = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        item {
-                            FilterChip(
-                                selected = selectedClassId == null || selectedClassId == 0,
-                                onClick = {
-                                    selectedClassId = 0
-                                    loadStudents()
-                                },
-                                label = { Text("All Classes", fontSize = 12.sp) },
-                                shape = RoundedCornerShape(50),
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color(0xFF0284C7),
-                                    selectedLabelColor = Color.White
-                                )
-                            )
-                        }
-                        items(classList) { cls ->
-                            val isSelected = selectedClassId == cls.id
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = {
-                                    selectedClassId = if (isSelected) 0 else cls.id
-                                    loadStudents()
-                                },
-                                label = { Text(cls.className ?: "Class", fontSize = 12.sp) },
-                                shape = RoundedCornerShape(50),
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color(0xFF0284C7),
-                                    selectedLabelColor = Color.White
-                                )
-                            )
-                        }
-                    }
-                }
-
                 // Filter Chips Row (Kyant0 Pill Shape)
-                LazyRow(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    item {
-                        FilterChip(
-                            selected = activeFilter == "ALL",
-                            onClick = { activeFilter = "ALL" },
-                            label = { Text("All ($totalCount)", fontSize = 12.sp) },
-                            shape = RoundedCornerShape(50)
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = activeFilter == "MISSING",
-                            onClick = { activeFilter = "MISSING" },
-                            label = { Text("⚠️ Missing ($missingPhotoCount)", fontSize = 12.sp) },
-                            shape = RoundedCornerShape(50)
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = activeFilter == "HAS_PHOTO",
-                            onClick = { activeFilter = "HAS_PHOTO" },
-                            label = { Text("✅ Captured ($withPhotoCount)", fontSize = 12.sp) },
-                            shape = RoundedCornerShape(50)
-                        )
+                    listOf(
+                        Triple("ALL", "All ($totalCount)", Color(0xFF38BDF8)),
+                        Triple("MISSING", "⚠️ Left ($missingPhotoCount)", Color(0xFFF59E0B)),
+                        Triple("HAS_PHOTO", "✨ Done ($withPhotoCount)", Color(0xFF10B981))
+                    ).forEach { (key, label, accentColor) ->
+                        val isSel = activeFilter == key
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = if (isSel) accentColor.copy(alpha = 0.2f) else Color(0xFF161F30),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isSel) accentColor else Color(0x2238BDF8)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { activeFilter = key }
+                        ) {
+                            Text(
+                                text = label,
+                                modifier = Modifier
+                                    .padding(vertical = 7.dp)
+                                    .fillMaxWidth(),
+                                fontSize = 11.sp,
+                                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSel) Color.White else Color(0xFF94A3B8),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
                     }
                 }
 
-                // Loading or Uploading banner
+                // Cloud Background Uploading Banner (Liquid Glass Style)
                 AnimatedVisibility(visible = queueRemaining > 0 || queueActive > 0) {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 6.dp),
                         shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0369A1))
+                        colors = CardDefaults.cardColors(containerColor = Color(0x330284C7)),
+                        border = BorderStroke(1.dp, Color(0x6638BDF8))
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
+                                modifier = Modifier.size(16.dp),
                                 strokeWidth = 2.dp,
-                                color = Color.White
+                                color = Color(0xFF38BDF8)
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "☁️ Background Uploading: $queueRemaining in queue (Active: $queueActive)",
-                                color = Color.White,
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.Medium
+                                text = "☁️ Background Sync: $queueRemaining remaining (Active: $queueActive)",
+                                color = Color(0xFFE2E8F0),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
@@ -617,9 +613,10 @@ class PhotoDeskActivity : ComponentActivity() {
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF161F30)),
+            border = BorderStroke(1.dp, if (hasPhoto) Color(0x3310B981) else Color(0x2238BDF8)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -627,16 +624,16 @@ class PhotoDeskActivity : ComponentActivity() {
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Avatar Frame with Kyant0 Pill / Squircle
+                // Squircle Avatar Frame with Kyant0 glow
                 Box(
                     modifier = Modifier
-                        .size(54.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(if (hasPhoto) Color(0xFF065F46) else Color(0xFF475569))
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (hasPhoto) Color(0xFF064E3B) else Color(0xFF1E293B))
                         .border(
                             width = 1.5.dp,
-                            color = if (hasPhoto) Color(0xFF10B981) else Color(0xFF64748B),
-                            shape = RoundedCornerShape(14.dp)
+                            color = if (hasPhoto) Color(0xFF10B981) else Color(0x4438BDF8),
+                            shape = RoundedCornerShape(16.dp)
                         )
                         .clickable { onSnapClick() },
                     contentAlignment = Alignment.Center
@@ -652,9 +649,9 @@ class PhotoDeskActivity : ComponentActivity() {
                     } else {
                         Text(
                             text = (student.fullName?.take(1) ?: "S").uppercase(),
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.Black,
                             fontSize = 22.sp,
-                            color = Color.White
+                            color = Color(0xFF38BDF8)
                         )
                     }
                 }
@@ -666,26 +663,27 @@ class PhotoDeskActivity : ComponentActivity() {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = Color(0xFF0284C7)
+                            color = Color(0x330284C7),
+                            border = BorderStroke(1.dp, Color(0x5538BDF8))
                         ) {
                             Text(
-                                text = student.scholarNumber ?: "-",
+                                text = "SCH: " + (student.scholarNumber ?: "-"),
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFF38BDF8)
                             )
                         }
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = student.className ?: "",
                             fontSize = 11.5.sp,
-                            color = Color(0xFF38BDF8),
+                            color = Color(0xFF94A3B8),
                             fontWeight = FontWeight.SemiBold
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(3.dp))
 
                     Text(
                         text = student.fullName ?: "Unnamed Student",
@@ -698,9 +696,9 @@ class PhotoDeskActivity : ComponentActivity() {
 
                     if (!student.fatherName.isNullOrBlank()) {
                         Text(
-                            text = "S/D of: ${student.fatherName}",
+                            text = "Father: ${student.fatherName}",
                             fontSize = 12.sp,
-                            color = Color(0xFF94A3B8),
+                            color = Color(0xFF64748B),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -709,15 +707,15 @@ class PhotoDeskActivity : ComponentActivity() {
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Snap Button (Capsule Style)
+                // Liquid Glass Snap / Update Button (Capsule Style)
                 Button(
                     onClick = onSnapClick,
                     shape = RoundedCornerShape(50),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (hasPhoto) Color(0xFF0F766E) else Color(0xFF2563EB)
+                        containerColor = if (hasPhoto) Color(0xFF0F766E) else Color(0xFF0284C7)
                     ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                    modifier = Modifier.height(38.dp)
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                    modifier = Modifier.height(40.dp)
                 ) {
                     Icon(
                         imageVector = if (hasPhoto) Icons.Default.Check else Icons.Default.CameraAlt,

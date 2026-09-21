@@ -392,16 +392,17 @@ public class PreviousStudentEditActivity extends AppCompatActivity {
 
     private void launchNativeCamera() {
         try {
-            currentPhotoFile = createImageFile();
-            if (currentPhotoFile != null) {
-                photoUri = FileProvider.getUriForFile(this, getPackageName() + ".provider", currentPhotoFile);
-                Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
-                takePictureIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-                startActivityForResult(takePictureIntent, CAMERA_CAPTURE_CODE);
+            Intent intent = new Intent(this, InAppCameraActivity.class);
+            if (student != null) {
+                intent.putExtra(InAppCameraActivity.EXTRA_STUDENT_ID, student.id);
+                intent.putExtra(InAppCameraActivity.EXTRA_STUDENT_NAME, student.name);
+                intent.putExtra(InAppCameraActivity.EXTRA_SCHOLAR_NUM, student.scholarNumber);
+                intent.putExtra(InAppCameraActivity.EXTRA_CLASS_NAME, student.className);
+                intent.putExtra(InAppCameraActivity.EXTRA_IS_PREVIOUS, true);
             }
+            startActivityForResult(intent, CAMERA_CAPTURE_CODE);
         } catch (Exception ex) {
-            Toast.makeText(this, "Error launching camera: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Error launching in-app camera: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -427,7 +428,10 @@ public class PreviousStudentEditActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == CAMERA_CAPTURE_CODE && resultCode == RESULT_OK) {
-            if (currentPhotoFile != null && currentPhotoFile.exists()) {
+            String path = data != null ? data.getStringExtra(InAppCameraActivity.EXTRA_IMAGE_PATH) : null;
+            if (path != null && !path.isEmpty()) {
+                compressAndUploadPhoto(new File(path));
+            } else if (currentPhotoFile != null && currentPhotoFile.exists()) {
                 compressAndUploadPhoto(currentPhotoFile);
             }
         } else if (requestCode == GALLERY_PICK_CODE && resultCode == RESULT_OK && data != null && data.getData() != null) {
