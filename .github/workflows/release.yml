@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag Name (e.g. v1.7)'
+        description: 'Release Tag Name (e.g. v1.8)'
         required: false
-        default: 'v1.7'
+        default: 'v1.8'
 
 permissions:
   contents: write
@@ -44,7 +44,7 @@ jobs:
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
           else
-            TAG="v1.7"
+            TAG="v1.8"
           fi
 
           # Ensure tag starts with 'v'
@@ -93,11 +93,12 @@ jobs:
             Standalone Native Android App for school operations, fee collection, attendance, and bulk photography.
 
             ### ✨ What's New in ${{ steps.release_version.outputs.tag }}:
-            - **🌟 Ultra-HD Crystal Clear Quality (900 x 1200)**: Upgraded passport output resolution from 600x800 to high-density 900x1200 with 2400px pre-decode, eliminating all blur and pixelation.
-            - **🎯 Increased File Size to ~150KB**: Raised JPEG compression budget to ~140KB–160KB with high quality (90–93%), preserving sharp facial contours, eyes, eyelashes, and uniform textures.
-            - **🖨️ Razor-Sharp Print Layout Compatibility**: Images now print crisp and clear at 300 DPI on physical PVC ID cards, admission forms, admit cards, and marksheets without artifacts.
-            - **📸 Max Sensor Capture Quality**: Upgraded CameraX capture mode to `CAPTURE_MODE_MAXIMIZE_QUALITY` for peak optical fidelity.
-            - **🔒 Strict Single-Class Locking**: Keeps focus on a single class persistently without resets or dumps.
+            - **🧠 Edge-Preserving Bilateral Background Denoising**: Smooths sensor noise in flat background regions, allowing JPEG DCT to encode backgrounds with near-zero bits while preserving 100% facial sharpness.
+            - **✨ Micro-Contrast Facial Feature Sharpening**: Enhanced definition for eyes, eyelashes, hair strands, and uniform collar contours without noise amplification.
+            - **🎨 2-Stage Cascaded Nyquist Area Downsampling**: Eliminates fabric moire patterns, color fringing, and aliasing when scaling from large camera sensors to 900x1200.
+            - **⚡ Rate-Distortion Bisection Optimization**: Binary-convergent rate-distortion search finding maximum perceptual quality (90–94%) within the optimal ~140KB–160KB budget.
+            - **🖨️ Razor-Sharp 300 DPI Print Clarity**: Flawless physical prints for PVC ID cards, admission forms, admit cards, and marksheets.
+            - **🔒 Strict Single-Class Locking**: Locks to a single class persistently without resets or dumps.
             - **💎 Kyant0 Liquid Glass UI**: Sleek continuous squircles, glowing neon cyan `#38BDF8` accents, and pill capsules.
             - **🔄 In-App Auto Update**: Automatically checks GitHub Releases and installs in 1 tap.
 
