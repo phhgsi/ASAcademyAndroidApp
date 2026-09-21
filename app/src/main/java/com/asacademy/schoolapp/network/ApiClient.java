@@ -284,21 +284,21 @@ public class ApiClient {
     public <T> void uploadPhotoBase64(int studentId, Bitmap bitmap, Class<T> responseClass, ApiCallback<T> callback) {
         executor.execute(() -> {
             try {
-                // 1. High-Quality Resize
-                int maxDim = 800;
+                // 1. High-Quality Resize (up to 1200px)
+                int maxDim = 1200;
                 Bitmap resized = getResizedAndOptimizedBitmap(bitmap, maxDim);
 
                 // 2. ✨ AI Smart Enhancement
                 Bitmap enhanced = com.asacademy.schoolapp.utils.ImageEnhancer.enhancePhoto(resized);
                 Bitmap targetBitmap = enhanced != null ? enhanced : resized;
 
-                // 3. Ultra-Crisp JPEG Compression (Target ~60KB)
+                // 3. Ultra-Crisp JPEG Compression (Target ~150KB)
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                int quality = 85;
+                int quality = 93;
                 targetBitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos);
-                while (baos.size() > 75 * 1024 && quality > 65) {
+                while (baos.size() > 165 * 1024 && quality > 80) {
                     baos.reset();
-                    quality -= 5;
+                    quality -= 3;
                     targetBitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos);
                 }
 

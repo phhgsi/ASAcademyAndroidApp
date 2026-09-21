@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag Name (e.g. v1.6)'
+        description: 'Release Tag Name (e.g. v1.7)'
         required: false
-        default: 'v1.6'
+        default: 'v1.7'
 
 permissions:
   contents: write
@@ -44,7 +44,7 @@ jobs:
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
           else
-            TAG="v1.6"
+            TAG="v1.7"
           fi
 
           # Ensure tag starts with 'v'
@@ -93,13 +93,13 @@ jobs:
             Standalone Native Android App for school operations, fee collection, attendance, and bulk photography.
 
             ### ✨ What's New in ${{ steps.release_version.outputs.tag }}:
-            - **📸 Built-in In-App Camera Studio (CameraX)**: High-performance embedded viewfinder completely within the app. Zero external camera launches, avoiding OS background app kills and activity reloads.
-            - **🔒 Strict Single-Class Locking**: Locks to a single selected class persistently. Prevents dumping all classes and stops app from jumping back or reloading.
-            - **💎 Kyant0 Liquid Glass UI Overhaul**: Sleek frosted glass cards, glowing neon cyan `#38BDF8` borders, continuous squircles, and capsule pill buttons.
-            - **✨ Real-Time On-Device AI Face Framing**: Auto-crops to 3:4 passport portrait ratio with Google ML Kit.
-            - **☁️ Zero-Delay Optimistic UI & Background Upload**: Photos appear instantly on-screen while uploading in the background.
-            - **🪪 Digital Student Identity Card**: Kyant0 continuous squircle portrait framing with dynamic on-device QR code verification and 1-tap share.
-            - **🔄 In-App Auto Update**: Automatically checks GitHub Releases for new updates and installs in 1 tap.
+            - **🌟 Ultra-HD Crystal Clear Quality (900 x 1200)**: Upgraded passport output resolution from 600x800 to high-density 900x1200 with 2400px pre-decode, eliminating all blur and pixelation.
+            - **🎯 Increased File Size to ~150KB**: Raised JPEG compression budget to ~140KB–160KB with high quality (90–93%), preserving sharp facial contours, eyes, eyelashes, and uniform textures.
+            - **🖨️ Razor-Sharp Print Layout Compatibility**: Images now print crisp and clear at 300 DPI on physical PVC ID cards, admission forms, admit cards, and marksheets without artifacts.
+            - **📸 Max Sensor Capture Quality**: Upgraded CameraX capture mode to `CAPTURE_MODE_MAXIMIZE_QUALITY` for peak optical fidelity.
+            - **🔒 Strict Single-Class Locking**: Keeps focus on a single class persistently without resets or dumps.
+            - **💎 Kyant0 Liquid Glass UI**: Sleek continuous squircles, glowing neon cyan `#38BDF8` accents, and pill capsules.
+            - **🔄 In-App Auto Update**: Automatically checks GitHub Releases and installs in 1 tap.
 
             ### 📲 Installation:
             1. Download `ASAcademyApp-${{ steps.release_version.outputs.tag }}.apk` below.

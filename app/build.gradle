@@ -11,8 +11,8 @@ android {
         applicationId "com.asacademy.schoolapp"
         minSdk 21
         targetSdk 34
-        versionCode project.hasProperty('appVersionCode') ? project.property('appVersionCode').toInteger() : 6
-        versionName project.hasProperty('appVersionName') ? project.property('appVersionName').toString() : "1.6"
+        versionCode project.hasProperty('appVersionCode') ? project.property('appVersionCode').toInteger() : 7
+        versionName project.hasProperty('appVersionName') ? project.property('appVersionName').toString() : "1.7"
     }
 
     buildTypes {

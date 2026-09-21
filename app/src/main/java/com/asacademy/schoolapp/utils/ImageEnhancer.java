@@ -71,8 +71,8 @@ public class ImageEnhancer {
 
                 long originalFileBytes = photoFile.length();
 
-                // 1. Smart Memory-Safe Subsampled Pre-Decode
-                Bitmap decodedBitmap = decodeSubsampledBitmap(photoFile.getAbsolutePath(), 1400, 1400);
+                // 1. High-Resolution Memory-Safe Pre-Decode (2400 x 2400)
+                Bitmap decodedBitmap = decodeSubsampledBitmap(photoFile.getAbsolutePath(), 2400, 2400);
                 if (decodedBitmap == null) {
                     callback.onError("Failed to decode photo image.");
                     return;
@@ -108,21 +108,21 @@ public class ImageEnhancer {
                                         croppedBitmap = createCenterPortraitCrop(orientedBitmap);
                                     }
 
-                                    // 4. Resize to Standard High-Definition Passport Portrait (600 x 800 px)
-                                    Bitmap resizedPortrait = scaleBitmap(croppedBitmap, 600, 800);
+                                    // 4. Resize to Standard High-Definition Passport Portrait (900 x 1200 px for razor-sharp 300DPI print layout)
+                                    Bitmap resizedPortrait = scaleBitmap(croppedBitmap, 900, 1200);
 
                                     // 5. AI Face-Aware Dynamic Exposure & Facial Edge Sharpening
                                     Bitmap enhancedBitmap = enhancePhoto(resizedPortrait);
                                     Bitmap finalBitmap = enhancedBitmap != null ? enhancedBitmap : resizedPortrait;
 
-                                    // 6. High-Efficiency Adaptive Quality Compression (Target: 40KB - 75KB)
+                                    // 6. High-Fidelity Quality Compression (Target: ~140KB - 160KB for pristine print & screen clarity)
                                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                                    int quality = 88;
+                                    int quality = 93;
                                     finalBitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos);
 
-                                    while (baos.size() > 75 * 1024 && quality > 65) {
+                                    while (baos.size() > 165 * 1024 && quality > 80) {
                                         baos.reset();
-                                        quality -= 5;
+                                        quality -= 3;
                                         finalBitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos);
                                     }
 
@@ -157,11 +157,18 @@ public class ImageEnhancer {
                             executor.execute(() -> {
                                 try {
                                     Bitmap fallbackCropped = createCenterPortraitCrop(orientedBitmap);
-                                    Bitmap scaled = scaleBitmap(fallbackCropped, 600, 800);
+                                    Bitmap scaled = scaleBitmap(fallbackCropped, 900, 1200);
                                     Bitmap enhanced = enhancePhoto(scaled);
+                                    Bitmap finalFallback = enhanced != null ? enhanced : scaled;
 
                                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                                    enhanced.compress(Bitmap.CompressFormat.JPEG, 85, baos);
+                                    int quality = 93;
+                                    finalFallback.compress(Bitmap.CompressFormat.JPEG, quality, baos);
+                                    while (baos.size() > 165 * 1024 && quality > 80) {
+                                        baos.reset();
+                                        quality -= 3;
+                                        finalFallback.compress(Bitmap.CompressFormat.JPEG, quality, baos);
+                                    }
                                     byte[] compressedBytes = baos.toByteArray();
                                     String base64Image = android.util.Base64.encodeToString(compressedBytes, android.util.Base64.NO_WRAP);
 
@@ -316,7 +323,7 @@ public class ImageEnhancer {
     private static Bitmap scaleBitmap(Bitmap src, int targetW, int targetH) {
         Bitmap output = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(output);
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
         Rect srcRect = new Rect(0, 0, src.getWidth(), src.getHeight());
         Rect dstRect = new Rect(0, 0, targetW, targetH);
         canvas.drawBitmap(src, srcRect, dstRect, paint);
@@ -384,13 +391,13 @@ public class ImageEnhancer {
                 enhancedPixels[i] = (a << 24) | (r << 16) | (g << 8) | b;
             }
 
-            // 2. Convolution Edge Sharpening
+            // 2. Natural Edge Sharpening (Micro-contrast for crystal-clear print definition)
             int[] sharpPixels = new int[pixelCount];
             System.arraycopy(enhancedPixels, 0, sharpPixels, 0, pixelCount);
 
-            float centerW = 1.34f;
-            float edgeW = -0.06f;
-            float cornerW = -0.025f;
+            float centerW = 1.18f;
+            float edgeW = -0.035f;
+            float cornerW = -0.01f;
 
             for (int y = 1; y < height - 1; y++) {
                 int rowOffset = y * width;
